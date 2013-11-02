@@ -1,0 +1,193 @@
+#! /bin/sh
+
+if [[ $# -lt 2 ]];then
+	echo "Please specify the groupName, source file"
+	exit 1
+fi
+
+tmpdir=./tmp
+groupName=$1
+sourcefile=$2
+if [[ ! -f "$sourcefile" ]];then
+	echo "Can't access the source file: $sourcefile"
+	exit 1
+fi
+
+# The timestamp format is yymmddhh24miss
+
+#tmpfile=${tmpdir}/insert.tmp.$$.$RANDOM
+tmpfile=${sourcefile}.insert
+rm -f $tmpfile
+cp $sourcefile $tmpfile
+
+#iconv -f gbk -t gbk $tmpfile > $tmpfile.tmp && mv $tmpfile.tmp $tmpfile
+
+HostName=`hostname|awk '{print substr($1,1,30)}'`
+if [[ "$HostName" == "" ]];then
+	HostName=unknown
+fi
+
+echo "alter session set nls_date_format='yymmddhh24miss';"
+
+# insert the perf/snap data
+cat $tmpfile |sed -e "1,$ s/'/''/g; 1,$ s/&/'||chr(38)||'/g; 1,$ s/%/'||chr(37)||'/g"|
+	awk '{	if(NF>=(3+$2)) { if (substr($1,1,5)=="perf_" || substr($1,1,5)=="snap_"){
+					printf "insert into "$1" values (\047"substr("'$HostName'",1,30)"\047, \047"$3"\047, "; 
+					for(i=4;i<=3+$2;i++)
+						if(i!=3+$2)
+							printf "\047"$i"\047, ";
+						else {
+							printf "\047"; 
+							for(j=i;j<NF;j++) 
+								printf $j" "; 
+							printf $NF ; 
+							print "\047);"
+						}
+				 }
+				}
+	     }'
+
+
+# insert the ftp data
+cat $tmpfile |sed -e "1,$ s/'/''/g; 1,$ s/&/'||chr(38)||'/g; 1,$ s/%/'||chr(37)||'/g"|
+	awk '{ if(NF>=(3+$2)) { if (substr($1,1,4)=="ftp_"){
+					printf "insert into "$1" values (\047"substr($4,1,30)"\047, \047"$5"\047,";
+                                        for(i=6;i<=5+$2;i++)
+                                                if(i!=5+$2)
+                                                        printf "\047"$i"\047, ";
+                                                else {
+                                                        printf "\047";
+                                                        for(j=i;j<NF;j++)
+                                                                printf $j" ";
+                                                        printf $NF ;
+                                                        print "\047);"
+                                                }
+                                 }
+                                }
+             }'
+
+
+# insert the file data
+cat $tmpfile |
+	awk '{ if(NF>=(3+$2)) { if (substr($1,1,5)=="file_"){
+		   			printf "nohup sh insert_file ";
+					for(j=length($1);j>0;j--) printf substr($1,j,1);
+					printf " \"'$HostName' "$3;
+					for(i=4;i<=3+$2;i++)
+						if(i!=3+$2){
+							printf " ";
+							for(j=length($i);j>0;j--) printf substr($i,j,1);
+						}else{ 
+							printf "\" ";
+							for(j=length($i);j>0;j--) printf substr($i,j,1);
+							print ">insert_file.log 2>&1 &";
+						}
+	   }}}'|sh
+
+# process the conf data
+conftmpfile=${tmpdir}/${groupName}.conf.tmp
+confdelfile=${tmpdir}/${groupName}.conf.del.tmp
+if [[ ! -f $conftmpfile ]];then
+	>$conftmpfile
+fi
+tmpstr=`date +"%H%M%S"`
+conftmpfilenew=${conftmpfile}.new.${tmpstr}
+cp $conftmpfile $conftmpfile.$tmpstr
+conffile=$conftmpfile
+conftmpfile=$conftmpfile.$tmpstr
+rm -f $conftmpfilenew
+
+confTable=configurations
+confmodifyTable=conf_modifications
+cat $tmpfile |sed  -e "1,$ s/'/''/g; 1,$ s/&/'||chr(38)||'/g; 1,$ s/%/'||chr(37)||'/g"|
+	awk '{  if(NF==(3+$2)) { if (substr($1,1,5)=="conf_") print $0}}'|
+		while read line; do
+			cmdname=`echo $line|awk '{print $1}'`
+			columns=`echo $line|awk '{print $2}'`
+			timestamp=`echo $line|awk '{print $3}'`
+			subclassPair=`echo $line|cut -d" " -f 4`
+			subclassName=`echo $subclassPair|cut -d":" -f 1`
+			subclassValue=`echo $subclassPair|cut -d":" -f 2-`
+			if [[ "$columns" -ge 1 ]];then
+				for column in `echo $line|cut -d" " -f 4-`; do
+					confname=`echo $column|cut -d":" -f 1`
+					confvalue=`echo $column|cut -d":" -f 2-`
+					tmpline="${subclassValue};${confname};${confvalue}"
+					echo "$tmpline">>$conftmpfilenew
+					if [[ `cat $conftmpfile|awk '{if( $0 == "'$tmpline'")print "a";else print "b"}'|grep "a"|wc -l|awk '{print $1}'` -gt 0 ]];then
+						echo "update $confTable set check_time='$timestamp' where host_name='$HostName' and subclass='$subclassValue' and conf_name=replace('$confname','_',' ') and value='$confvalue' and create_time=(select max(create_time) from $confTable where host_name='$HostName' and subclass='$subclassValue' and conf_name=replace('$confname','_',' ') and value='$confvalue');"
+					else
+						oldvalue=""
+						if [[ `cat $conftmpfile|awk '{if($1=="'$subclassValue'" && $2=="'$confname'" && $3!="")print}' FS=";"|wc -l|awk '{print $1}'` -gt 0 ]];then
+							oldvalue=`cat $conftmpfile|awk '{if($1=="'$subclassValue'" && $2=="'$confname'")print $3}' FS=";"|tail -1`
+						fi
+						recordNewConf="unknown"
+						if [[ "$oldvalue" != "" && "$oldvalue" != "$confvalue" ]];then
+							if [[ "$confname" != "Processor_Frequency" ]];then
+								echo "insert into $confmodifyTable values ('$HostName', '$timestamp', '$subclassValue', replace('$confname','_',' '), '$oldvalue', '$confvalue');"
+								recordNewConf="true"
+								sed "s/$subclassValue;$confname;$oldvalue/$subclassValue;$confname;$confvalue/g" $conftmpfile > $conftmpfile.tmp && mv $conftmpfile.tmp $conftmpfile
+							else	
+								recordNewConf="false"	
+								echo "update $confTable set check_time='$timestamp' , value='$confvalue' where host_name='$HostName' and subclass='$subclassValue' and conf_name=replace('$confname','_',' ') and value='$confvalue' and create_time=(select max(create_time) from $confTable where host_name='$HostName' and subclass='$subclassValue' and conf_name=replace('$confname','_',' ') and value='$oldvalue');"
+							fi
+						elif [[ "$oldvalue" == "" ]];then
+							echo "insert into $confmodifyTable values ('$HostName', '$timestamp', '$subclassValue', replace('$confname','_',' '), 'New Item', '$confvalue');"
+							recordNewConf="true"
+							echo "$subclassValue;$confname;$confvalue">>$conftmpfile
+						fi
+						if [[ "$recordNewConf" == "true" ]];then
+							echo "insert into $confTable values('$HostName', '$timestamp', '$timestamp', '$subclassValue', replace('$confname','_',' '), '$confvalue');"
+						fi
+					fi
+					# Update the conf del file items
+					if [[ `cat $confdelfile|awk '{if($1=="'$subclassValue'" && $2=="'$confname'")print $0}'|wc -l|awk '{print $1}'` -gt 0 ]];then
+						sed "s/$subclassValue $confname .*/$subclassValue $confname 0/g" $confdelfile >$confdelfile.tmp && mv $confdelfile.tmp $confdelfile
+					else
+						echo "$subclassValue $confname 0" >>$confdelfile
+					fi
+				done
+			fi
+		done
+
+if [[ -f "$conftmpfilenew" && `cat $conftmpfilenew|awk '{if(NF>0)print}'|wc -l|awk '{print $1}'` -gt 0 ]];then
+	for x in `awk '{if(NF==3)print $1";"$2}' FS=";" $conftmpfile`; do
+		subclassValue=`echo $x|cut -d";" -f 1`
+		confname=`echo $x|cut -d";" -f 2`
+		if [[ `awk '{if($1";"$2=="'$x'")print}' FS=";" $conftmpfilenew|wc -l|awk '{print $1}'` == 0 ]];then
+			confvalue=`awk '{if($1";"$2=="'$x'")print $3}' FS=";" $conftmpfile|tail -1`
+			if [[ `cat $confdelfile|awk '{if($1=="'$subclassValue'" && $2=="'$confname'")print}'|wc -l|awk '{print $1}'` -gt 0 ]];then
+				n=`cat $confdelfile|awk '{if($1=="'$subclassValue'" && $2=="'$confname'")print $3}'`
+				if [[ "$n" != "" && $n -ge 5 ]];then
+					sed "s/$subclassValue $confname .*/$subclassValue $confname 0/g" $confdelfile >$confdelfile.tmp && mv $confdelfile.tmp $confdelfile
+					echo "insert into $confmodifyTable values ('$HostName', '$timestamp', '$subclassValue', replace('$confname','_',' '), '$confvalue', 'Erased');"
+					sed "/$subcalssValue;$confname;$confvalue/d" $conftmpfile>$conftmpfile.tmp && mv $conftmpfile.tmp $conftmpfile
+				elif [[ "$n" != "" && $n -lt 5 ]];then
+					n=`expr $n + 1`
+					sed "s/$subclassValue $confname .*/$subclassValue $confname $n/g" $confdelfile >$confdelfile.tmp && mv $confdelfile.tmp $confdelfile
+					echo "update $confTable set check_time='$timestamp' where host_name='$HostName' and subclass='$subclassValue' and conf_name=replace('$confname','_',' ') and value='$confvalue' and create_time=(select max(create_time) from $confTable where host_name='$HostName' and subclass='$subclassValue' and conf_name=replace('$confname','_',' ') and value='$confvalue');"
+				fi
+			else
+				echo "$subclassValue $confname 1" >>$confdelfile
+				echo "update $confTable set check_time='$timestamp' where host_name='$HostName' and subclass='$subclassValue' and conf_name=replace('$confname','_',' ') and value='$confvalue' and create_time=(select max(create_time) from $confTable where host_name='$HostName' and subclass='$subclassValue' and conf_name=replace('$confname','_',' ') and value='$confvalue');"
+			fi
+		fi
+	done
+	mv $conftmpfile $conffile
+	rm $conftmpfilenew
+fi
+
+# update or insert the local time and server time
+recFile="./execrec.basic.log"
+whetherCheckedDatetime=`sh ./QueryExecRecord internal check_datetime $recFile`
+tmpdate=`date +"%y%m%d%H%M%S"`
+
+if [[ "$whetherCheckedDatetime" == "0"  || "$whetherCheckedDatetime" != "$HostName" ]];then
+	sh ./UpdateOrCreateExecRecord internal check_datetime $HostName $tmpdir $recFile
+	echo "insert into check_datetime values ('$HostName', '$tmpdate', sysdate, round((to_date('$tmpdate','yymmddhh24miss')-sysdate)*24*3600) );"
+else
+	echo "update check_datetime set agent_time='$tmpdate', server_time=sysdate, difference=round((to_date('$tmpdate','yymmddhh24miss')-sysdate)*24*3600) where host_name='$HostName' ;"
+fi
+
+rm -f $tmpfile $conftmpfile
+#rm -f $sourcefile

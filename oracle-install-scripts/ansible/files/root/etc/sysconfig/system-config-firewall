@@ -1,0 +1,4 @@
+# For demo we allow all incoming connections. Dont do this at home
+
+--disabled
+--service=ssh

@@ -1,0 +1,174 @@
+if [[ $# -eq 0 ]];then
+	echo please specify the working folder.
+	exit 1
+fi
+
+
+
+if [[ -f ~/.profile ]];then
+	. ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+	. ~/.bash_profile
+fi
+
+cd $1
+
+WorkAreaDir=workarea
+
+alert_db_cmd=`cat db_conn.cfg|awk '{if($1=="alert"){for(i=2;i<NF;i++)printf $i" ";print $NF}}'`
+
+if [[ "$alert_db_cmd" == "" ]];then
+	echo "Can't get the db command"
+	exit 1
+fi
+
+if [[ ! -f alert.cfg ]];then
+	echo "can't find the alert config file"
+	exit 1
+fi
+
+line_cnt=`cat alert.cfg|sed '/^ *#/d'|awk '{if(NF>0)print}'|wc -l|awk '{print $1}'`
+echo $line_cnt useful config lines in alert.cfg
+p=0
+while [[ $p -lt $line_cnt ]];do
+   p=`expr $p + 1`
+   line=`cat alert.cfg|sed '/^ *#/d'|awk '{if(NF>0)print}'|head -$p|tail -1`
+   alert_method=`echo "$line"|awk '{print $1}'`
+   alert_target=`echo "$line"|awk '{print $2}'`
+   alert_groups=`echo "$line"|awk '{print $3}'`
+   alert_scripts=`echo "$line"|awk '{print $4}'`
+
+   if [[ "$alert_groups" == '*' ]];then
+      alert_groups=''
+      for x in `ls alerts`; do
+          if [[ -d alerts/$x  && "$x" != "" && "$x" != '.' && "$x" != '..' ]];then
+             if [[ "$alert_groups" == '' ]];then
+                alert_groups="$x"
+             else
+                alert_groups="${alert_groups} ${x}"
+             fi
+          fi
+      done
+   else 
+      alert_group=`echo "$alert_groups"|tr "," " "`
+   fi 
+
+echo "$p: method=$alert_method ; " "target=$alert_target ; " "groups=$alert_groups ; " "scripts=$alert_scripts"
+    
+   for group in `echo "$alert_groups` ; do
+ 
+      alert_script="./tmp/alert_union.sql"
+      tmpfile=./tmp/alert.tmp
+      rm -f $alert_script $tmpfile
+   
+      echo "set lines 999" >> $tmpfile
+      echo "set pages 999" >> $tmpfile
+      echo "set feedback off" >> $tmpfile
+      echo "set serveroutput off" >> $tmpfile
+      echo "set heading off" >>$tmpfile
+      echo "col hn format a50" >> $tmpfile
+      echo "col msg format a900" >> $tmpfile
+     
+echo "group=$group" 
+      for x in `ls alerts/$group` ; do
+        isUseful=false
+        if [[ "$alert_scripts" == '*' ]];then
+           isUseful=true
+        elif [[ `echo "$alert_scripts"|tr "," " "|awk '{for(i=1;i<=NF;i++)if($i=="'$x'")print "isUseful"}'|grep "isUseful"|wc -l|awk '{print $1}'` != '0' ]]
+        then
+           isUseful=true
+        fi
+        if [[ "$isUseful" == 'true' ]];then
+echo "script=$x"
+      	   cat alerts/$group/$x >>$tmpfile
+      	   echo union >>$tmpfile
+        fi
+      done
+   
+      timestr=`date +"%H:%M"`
+      sender=`hostname`
+      sendstamp="[$timestr by $sender]"
+
+echo sendstamp=$sendstamp
+
+      if [[ -f $tmpfile && `cat $tmpfile|wc -l|awk '{print $1}'` != '0' ]];then
+         sed '$d' $tmpfile > ${tmpfile}.tmp && mv ${tmpfile}.tmp $tmpfile 
+         echo "order by 1;" >>$tmpfile && mv $tmpfile $alert_script
+        
+         #cat $alert_script
+#############################################################################
+	#if [[ "$group" == "sunl" ]];then cp $alert_script ./sunl_alert_script.sql ; fi
+	
+
+         if [[ "$alert_method" == "sms" ]];then 
+            
+            $alert_db_cmd <<!|awk '{if(NF>=2){for(i=1;i<NF;i++)printf $i" ";print $NF";"}}' > $tmpfile
+            
+                    @$alert_script
+            
+                    exit;
+            
+!
+            
+            i=0
+            n=0
+            msglimit=200
+            rm -f $alert_script
+            
+            cat $tmpfile|awk '{if(NF>0)print $0}'>$tmpfile.xyz.tmp && mv $tmpfile.xyz.tmp $tmpfile
+
+echo `wc -l $tmpfile|awk '{print $1}'` lines in result file      
+     
+            if [[ `wc -l $tmpfile|awk '{print $1}'` != '0' ]];then 
+
+		timestamp=`date +"%Y%m%d%H%M%S"`
+	      
+               cat $tmpfile |sed -e "1,$ s/'/''/g; 1,$ s/&/'||chr(38)||'/g; 1,$ s/%/'||chr(37)||'/g"|
+		awk '{print "insert into alerts values (\047'$timestamp'\047,\047'$group'\047, \047"$0"\047);"}' >$tmpfile.sql
+
+		if [[ -f db_conn.cfg ]];then
+			db_conn=`cat db_conn.cfg|awk '{if($1=="report"){for(i=2;i<NF;i++)printf $i" "; print $NF}}'`
+			$db_conn <<!
+				alter session set nls_date_format='yyyymmddhh24miss';
+				@$tmpfile.sql
+				commit;
+!
+		fi
+
+
+               while [[ $i -lt `wc -l $tmpfile|awk '{print $1}'` ]] ; do
+                       i=`expr $i + 1`
+                       line=`head -$i $tmpfile|tail -1`
+                       if [[ `echo "$line"|awk '{print NF}'` -gt 0 ]];then
+                               length=`echo "$line"|awk '{print length($0)}'`
+               		if [[ "$length" -gt 0 ]];then
+               	                n=`expr $n + $length + 1`               
+               	                if [[ $n -le $msglimit || $i == 1 ]];then
+               	                        echo "$line" >> $alert_script   
+               	                else
+               	                        echo "$sendstamp" >>$alert_script
+               	                        cat $alert_script|xargs ./smon_sms $alert_target
+               	                        rm -f $alert_script
+               	                        echo "$line">>$alert_script
+               	                        n=$length
+               	                fi
+               		fi
+                       fi
+               done
+               
+               
+               if [[ -f $alert_script ]];then
+                       echo "$sendstamp" >>$alert_script
+                       cat $alert_script|sed 's/^/"/; s/$/"/'|xargs ./smon_sms $alert_target
+                       rm -f $alert_script
+               fi
+               
+               rm -f $tmpfile $alert_script
+            fi
+         fi
+      else
+         ./smon_sms $alert_target "can't access any alert scripts $sendstamp"
+      fi
+   done
+echo "------------------------------------------" 
+done

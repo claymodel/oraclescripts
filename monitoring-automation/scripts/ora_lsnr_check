@@ -1,0 +1,9 @@
+if [[ -f ~/.profile ]];then . ~/.profile ; elif [[ -f ~/.bash_profile ]];then . ~/.bash_profile ; fi
+
+if [[ `lsnrctl status|grep "TNS-01169: The listener has not recognized the password"|wc -l|awk '{print $1}'` == 0 ]];then
+if [[ `lsnrctl status|sed 's/  */ /g'|grep "Security ON: Password"|wc -l|awk '{print $1}'` == 0 ]];then
+  echo NO 
+  exit;
+fi
+fi
+echo YES

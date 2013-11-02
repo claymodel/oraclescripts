@@ -1,0 +1,26 @@
+
+function CheckScriptDistr {
+   _scriptName=$1
+   _hostStr="" 
+   _hostCnt=0
+   cat service.cfg|grep -v ^#|while read _line ; do
+     _host=`echo $_line|awk '{print $1}'`
+     _services=`echo $_line|awk '{print $2}'`
+     if [[ `echo "$_services"|awk '{for(i=1;i<=NF;i++)if($i=="'$_scriptName'") a=1}END{print a}' a=0 FS=';'` -gt 0 ]];then
+       _hostStr="$_hostStr $_host"
+       _hostCnt=`expr $_hostCnt + 1`
+     fi
+   done
+   echo "$_scriptName   $_hostCnt   $_hostStr"
+}
+
+scriptName=$1
+
+if [[ "$scriptName" == "" ]];then
+  for script in `cat cmd.cfg|grep -v ^#|grep -v ^tabdef|awk '{if(NF>0)print $1}' FS=';'|sort -u`; do
+    CheckScriptDistr $script
+    echo ""
+  done 
+else
+  CheckScriptDistr $scriptName  
+fi

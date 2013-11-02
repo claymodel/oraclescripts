@@ -1,0 +1,17 @@
+workfolder=$1
+cd $workfolder
+
+HAND=13953110187
+
+
+for x in `ls MICRO_REPORTS` ; do
+
+	tmpfile=$workfolder/tmp/$x
+	rm -f $tmpfile
+        sh MICRO_REPORTS/$x > $tmpfile
+	if [[ -f $tmpfile ]] ;then
+		echo ha
+		cat $tmpfile
+        	sh smon_sms $HAND  $tmpfile
+	fi
+done 

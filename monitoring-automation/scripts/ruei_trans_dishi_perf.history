@@ -1,0 +1,44 @@
+host_name=`hostname`
+
+lastDate=201105200000
+iFile="tmp/ruei_export.history.dishi.trans.perf.tmp"
+if [[ -f $iFile ]];then
+        lastDate=`cat $iFile|head -1`
+fi
+
+yy=`echo $lastDate|awk '{print substr($1,1,4)}'`
+mm=`echo $lastDate|awk '{print substr($1,5,2)}'`
+dd=`echo $lastDate|awk '{print substr($1,7,2)}'`
+hh=`echo $lastDate|awk '{print substr($1,9,2)}'`
+mi=`echo $lastDate|awk '{print substr($1,11,2)}'`
+
+iDate=$yy$mm$dd
+
+mi=`expr $mi + 55`
+mi=`expr $mi % 60`
+
+if [[ $mi -lt 10 ]];then
+        mi="0"$mi
+fi
+
+if [[ $mi == "55" ]];then
+        hh=`expr $hh + 23`
+        hh=`expr $hh % 24`
+        if [[ $hh -lt 10 ]];then
+                hh="0"$hh
+        fi
+        if [[ $hh == 23 ]];then
+                iDate=`sh calc_date_ndays $yy$mm$dd -1`
+        fi
+fi
+
+lastDate=$iDate$hh$mi
+echo $lastDate>$iFile
+
+if [[ "$host_name" == "ruei1a" ]];then
+   sh scripts/ruei_export.history localhost/ruei 10160 60 $lastDate
+elif [[ "$host_name" == "ruei2b" ]];then
+   sh scripts/ruei_export.history localhost/ruei 10100 60 $lastDate
+elif [[ "$host_name" == "ruei3b" ]];then
+   sh scripts/ruei_export.history localhost/ruei 10102 60 $lastDate
+fi

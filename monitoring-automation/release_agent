@@ -1,0 +1,16 @@
+
+workdir=release
+
+if [[ ! -d release ]];then
+        mkdir $workdir
+fi
+
+rm -f smartmon*.tar
+
+filename=smartmon`date +"%y%m%d%H"`.tar
+
+tar cf $filename QueryExecRecord UpdateOrCreateExecRecord calc_date_daysbetweentwodate calc_date_monthlastday calc_date_ndays calc_date_tomorrow calcsec cmd.cfg db_conn.cfg ftp ftp_handler get_newly_released_agent insert insert_file release_server.cfg scripts service.cfg smartmon_agent smartmon_basic smartmon_transfer
+
+mv $filename $workdir/
+
+find $workdir -mtime +7 -exec rm -r {} \;

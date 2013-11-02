@@ -1,0 +1,21 @@
+#!/bin/sh
+
+if [[ $# != 3 ]];then
+	echo "Please specify the record type, record name and the exec record file"
+	exit
+fi
+
+recType=$1
+recName=$2
+recFile=$3
+
+secTimestamp=0
+
+if [[ -f "$recFile" ]];then
+	line=`awk '{if($1=="'$recType'" && $2=="'$recName'")print $3}' $recFile|tail -1`
+	if [[ "$line" != "" ]];then
+		secTimestamp="$line"
+	fi
+fi
+
+echo $secTimestamp

@@ -1,0 +1,125 @@
+# common part:
+
+   host_name varchar2(30)
+   check_time date
+   dbid number
+   instance_number number
+   begin_snap_id number
+   end_snap_id number
+
+table snap_ora_sp_load_profile 
+   item varchar2(50)
+   value number
+
+
+table snap_ora_sp_instance_effici
+   item varchar2(50)
+   value number
+
+table snap_ora_sp_top_wait_events
+   event varcahr2(100)
+   waits number
+   time_sec number
+   time_in_total_pec number
+
+table snap_ora_sp_cluster_specific
+   item varcahr2(100)
+   value number
+
+table snap_ora_sp_ges_cluster_stat
+   item varchar2(100)
+   total number
+   per_second number
+   per_trans number
+
+table snap_ora_sp_system_event
+   event varchar2(100)
+   waits number
+   timeouts number
+   total_wait_time_sec number
+   avg_wait_time_ms number
+   waits_per_txn number
+
+table snap_ora_sp_background_wait
+   event varcahr2(100)
+   waits number
+   timeouts number
+   total_wait_time_sec number
+   avg_wait_time_ms number
+   waits_per_txn number
+
+table snap_ora_sp_sql_buffer_gets
+   buffer_gets number
+   executions number
+   gets_per_exec number
+   pec_total number
+   cpu_time_sec number
+   elapsd_time_sec number
+   hash_value number
+   module varcahr2(100)
+
+table snap_ora_sp_sql_physical_r
+   physical_reads number
+   executions number
+   read_per_exec number
+   pec_total number
+   cpu_time_sec number
+   elapsd_time_sec number
+   hash_value number
+   module varcahr2(100)
+
+table snap_ora_sp_sql_executions
+   executions number
+   rows_processed number
+   rows_per_exec number
+   cpu_per_exec_sec number
+   elapsd_time_sec number
+   hash_value number
+   module varchar2(100)
+
+table snap_ora_sp_sql_parse_calls
+   parse_calls number
+   executions number
+   pec_total_parses number
+   hash_value number
+   module varchar2(100)
+
+table snap_ora_sp_sql_shareable_mem
+   sharable_mem_bytes number
+   executions number
+   pec_total number
+   hash_value number
+   module varchar2(100)
+
+table snap_ora_sp_sql_version_count
+   version_count number
+   executions number
+   hash_value number
+   module varchar2(100)
+
+table snap_ora_sp_instance_activity
+   item varchar2(100)
+   total number
+   per_second number
+   per_trans number
+
+table snap_ora_sp_tablespace_io
+   tablespace_name varchar2(30)
+   reads number
+   avg_reads_per_sec number
+   avg_read_time_ms number
+   avg_blocks_per_read number
+   writes number
+   avg_writes_per_sec number
+   buffer_waits number
+   avg_buffer_wait_time_ms number
+
+table snap_ora_sp_file_io
+   tablespace_name varchar2(30)
+   file_name varchar2(200)
+   reads number
+   avg_reads_per_sec number
+   avg_read_time_ms number
+   avg_blocks_per_read number
+   writes number
+   avg_buffer_wait_time_ms number

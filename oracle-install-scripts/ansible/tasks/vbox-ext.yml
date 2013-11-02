@@ -1,0 +1,6 @@
+---
+# Task to install vbox extensions
+
+  - name: Install Vbox extensions 
+    action: shell echo foo
+    

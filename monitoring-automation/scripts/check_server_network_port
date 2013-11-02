@@ -1,0 +1,25 @@
+
+if [[ $# -lt 1 ]];then
+	exit 1
+fi
+
+workdir=$1
+
+cd $workdir
+
+if [[ ! -f check_port_status ]];then
+	exit 1
+fi
+
+for ip in 10.19.84.10 10.19.84.11 10.19.248.108 10.19.248.109 ; do
+for port in 21 1521 ; do
+
+	status=`sh check_port_status $ip $port|awk '{print $1}'`
+	if [[ "$status" == "" ]];then
+		status='unknown'
+	fi
+	echo $ip $port $status
+
+done 
+done
+

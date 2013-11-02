@@ -1,0 +1,46 @@
+#!/bin/sh
+
+if [[ $# -lt 2 ]];then
+        exit 2;
+fi
+
+URL_BASE=$1
+REPORT_ID=$2
+
+REPORT_INTERVAL=5
+if [[ $# -ge 3 ]];then
+	REPORT_INTERVAL=$3
+fi 
+
+OutputContainDate=true
+if [[ $# -ge 4 ]];then
+	OutputContainDate=false
+fi	
+
+if [[ `uname` != "Linux" ]];then
+	exit 9
+fi
+
+DATE=`date -d "5 years 4 months 3 days 2 hours 1 minutes" +"%Y%m%d%H%M"`;
+
+if [[ "$REPORT_INTERVAL" == "60" ]];then
+        CURRENT_MINUTE=`date +"%M"`
+        if [[ "$CURRENT_MINUTE" == "12" ]];then
+                DATE=`date -d "132 minutes ago" +"%Y%m%d%H"`
+                DATE="${DATE}00"
+		timestr="${DATE}00"
+        fi
+elif [[ "$REPORT_INTERVAL" == "1440" ]];then
+	DATE=`date -d "1 days ago" +"%Y%m%d"`
+	timestr="${DATE}000000"
+else
+	tmpInterval=`expr $REPORT_INTERVAL + 55`
+	DATE=`date -d "$tmpInterval minutes ago" +"%Y%m%d%H%M"`
+	timestr="${DATE}00"
+fi
+if [[ "$OutputContainDate" == "true" ]];then
+	perl scripts/ruei_export.pl $URL_BASE $REPORT_ID $DATE | awk '{if(NF>0){printf "'$timestr' "; for (i=2;i<NF;i++)printf ("%s",$i " "); print $NF}}'
+else
+	perl scripts/ruei_export.pl $URL_BASE $REPORT_ID $DATE | awk '{if(NF>0){for (i=1;i<NF;i++)printf ("%s",$i " "); print $NF}}'
+fi
+

@@ -1,0 +1,149 @@
+testing=$1
+process_id=$$
+program_name=$0
+
+if [[ `ps -ef|awk '{if($2!="'$process_id'")print}'|grep $program_name|grep -v grep|wc -l|awk '{print $1}'` -gt 0 ]];then
+        #echo waiting for another process
+        exit
+fi
+
+if [[ -f ~/.bash_profile ]];then
+        . ~/.bash_profile
+elif [[ -f ~/.profile ]];then
+        . ~/.profile
+fi
+
+cd /jsbak/RUEI_PRODUCT
+
+if [[ "$testing" != "" ]];then
+baseTable=`echo "select to_char(job_time-1,'yyyy-mm-dd')||':RUEI_'||high_value from bidata_parts_status where status='ANALYZED' and job_time>sysdate-1/2;"|
+	sqlplus -s uxinsight/oracle123|awk '{if(NF>0)print}'|tail -1`
+else
+baseTable=`echo "select to_char(job_time-1,'yyyy-mm-dd')||':RUEI_'||high_value from bidata_parts_status where status='ANALYZING' and job_time>sysdate-1/2;"|
+	sqlplus -s uxinsight/oracle123|awk '{if(NF>0)print}'|tail -1`
+fi
+if [[ "$baseTable" != "no rows selected" && `echo "$baseTable"|awk '{print NF}'` == 1 && `echo "$baseTable"|awk '{print NF}' FS='_'` == 2 ]];then
+	job_date=`echo $baseTable|awk '{print $1}' FS=':'`
+	baseTable=`echo $baseTable|awk '{print $2}' FS=':'`
+	tmpTable="TMP_${baseTable}"
+
+	resultFile=${tmpTable}.lst
+
+	sqlplus -s uxinsight/oracle123 <<!
+
+            create table $tmpTable as
+            select /*+parallel(a,10)*/
+             a.uf_name, a.step, 
+             '2' degree,count(distinct pageview_id) cnt
+            from $baseTable a
+            where a.uf_name is not null and page_load_time/1000<=2
+            group by a.uf_name, a.step
+            union
+            select /*+parallel(a,10)*/
+             a.uf_name, a.step, 
+             '5',count(distinct pageview_id)
+            from $baseTable a
+            where a.uf_name is not null and page_load_time/1000>2 and page_load_time/1000<=5
+            group by a.uf_name, a.step
+            union
+            select /*+parallel(a,10)*/
+             a.uf_name, a.step, 
+             '10',count(distinct pageview_id)
+            from $baseTable a
+            where a.uf_name is not null and page_load_time/1000>5 and page_load_time/1000<=10
+            group by a.uf_name, a.step
+            union
+            select /*+parallel(a,10)*/
+             a.uf_name, a.step, 
+             'a',count(distinct pageview_id)
+            from $baseTable a
+            where a.uf_name is not null
+            group by a.uf_name, a.step
+            ;
+
+		 
+	    insert into business_2510_daily 
+	    select trunc(sysdate-1,'dd') job_date,
+	     a.uf_name "业务名",
+             round(a.cnt*100/d.cnt,1) "小于2秒",
+	     round(b.cnt*100/d.cnt,1) "小于5秒",
+             round(c.cnt*100/d.cnt,1) "小于10秒",
+	     round((d.cnt-a.cnt-b.cnt-c.cnt)*100/d.cnt,1) "其他"
+            from tmp_RUEI_22144320 a, tmp_RUEI_22144320 b, tmp_RUEI_22144320 c, tmp_RUEI_22144320 d
+            where a.uf_name=b.uf_name and a.step=b.step and a.uf_name=c.uf_name and a.step=c.step
+            and a.uf_name=d.uf_name and a.step=d.step
+            and a.degree='2' and b.degree='5' and c.degree='10' and d.degree='a'
+            and (a.uf_name,a.step)in (
+                ('包月亮查询','查询'),('补卡','提交'),('查询个人客户资料','点击查询按钮'),
+                ('查询用户资料','显示客户资料'),('产品变更','提交'),('登录','签入'),('改付费计划','提交'),
+                ('改资料','提交'),('个人客户开户','提交'),('过户','提交'),('积分查询','查询'),('缴费','提交'),
+                ('缴费回退','提交'),('梦网业务订购或取消','提交'),('停开机','提交'),('详单查询','查询明细话单'),
+                ('用户资料变更','点击提交'),('余额查询','查询'),('账单查询','查询')  
+             )  
+            order by 2;
+
+	    col uf_name format a30
+	    set lines 200
+	    set pages 9999
+	    set feedback off
+	    set heading off 
+	    
+	    spool $resultFile
+	    select distinct uf_name,less_than_2,less_than_5,less_than_10,over_10 
+	    from business_2510_daily where job_date=trunc(sysdate-1,'dd') order by 5 desc, 4 desc, 3 desc, 2 desc;
+	    spool off
+
+	    delete business_2510_daily where rowid not in (
+		select min(rowid) from business_2510_daily group by job_date,uf_name,less_than_2,less_than_5,less_than_10,over_10)
+	    ;
+
+	    commit;
+
+	    drop table $tmpTable;
+	
+!
+
+	if [[ -f $resultFile ]];then
+		cat $resultFile|awk '{if(NF>1)print}'|awk '{if(substr($1,1,3)!="---"){
+                                        for(i=1;i<=NF;i++) {
+                                           if(i==1){
+                                              print $i;
+                                              #for(j=30;j>length($i);j--) printf " ";
+                                           }else {
+                                              #if(NR==1)x=$i;else x=$i"%";
+					      if($i==0)x=$i;else x=$i"%";
+                                              if(substr(x,1,1)==".") x="0"x;
+                                              if(i==2) for(j=6;j>length(x);j--) printf "xXx";
+                                              else for(j=6;j>length(x);j--) printf " ";
+                                              printf x;
+                                           }
+                                        }
+                                        print "";
+                                }
+                        }' |
+sed '1i\
+CRM系统2-5-8彩信日报\
+发送单位: 维护室\
+\
+说明：\
+a. 每项业务占2行，分别是业务名和忙时数据\
+b. 数据分为4列，分别是页面加载速度小于2秒、2-5秒、5-8秒、大于8秒的百分比\
+c. 忙时指8:00~18:00\
+d. 报表负责人：孙麟 13953110187\
+' >$resultFile.tmp && mv $resultFile.tmp $resultFile
+
+		if [[ -f $resultFile && `cat $resultFile|awk '{if(NF>0)print}'|wc -l|awk '{print $1}'` -gt 0 ]];then
+			if [[ "$testing" == "" ]];then
+			  HAND=13953110187,13905318558,13953101968,13953102136,13905312002,13805318556,13953119917,13953109116,13805318156,13608929770
+		        elif [[ "$testing" == "uat" ]];then
+			  HAND=13953110187,13905318558,13953101968,13953102136,13905312002,13805318556,13953119917,13953109116,13805318156,13608929770
+		        elif [[ "$testing" == "beta" ]];then
+			  HAND=13953110187,13905312002
+			else 
+			  HAND=13953110187
+			fi
+			sh smon_mms $HAND $resultFile "CRM系统2-5-10日报($job_date)"
+		fi
+		rm -f $resultFile
+	fi
+fi

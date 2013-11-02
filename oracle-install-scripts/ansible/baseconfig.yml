@@ -1,0 +1,37 @@
+---
+# Assumes OEL 6 
+- name: Playbook to run as root to set up base image 
+  hosts: demo
+  user: root
+  vars_files:
+    - vars/env.yml
+
+  tasks:
+# Tip: For development comment out any long running task you are not interested in.
+
+# Create oracle home, groups, etc.
+#  - include: tasks/oraclehome.yml
+
+# Install all yum packages
+#  - include: tasks/yum.yml
+
+# optional - set git proxy 
+  - action: shell git config --global http.proxy $http_proxy
+    only_if: '"$http_proxy"'
+# Pull scripts from github
+  - action: git repo=https://github.com/Oracle-IAM/Oracle-IAM-Scripts.git dest=/var/tmp/scripts
+
+
+# Copy init files 
+  - action: copy src=files/root/etc/init.d/$item  dest=/etc/init.d/$item mode=0755 
+    with_items:
+      - updatehosts
+      - oracle 
+# Enable services
+  - action: service name=oracle enabled=yes state=started
+#  - action: service name=updatehosts enabled=yes state=started 
+#  - action: service name=vncserver enabled=yes state=started 
+
+#  - include: tasks/vbox-ext.yml
+#  - name: Reboot for new kernel to take effect 
+#    action: command /sbin/shutdown -r now 

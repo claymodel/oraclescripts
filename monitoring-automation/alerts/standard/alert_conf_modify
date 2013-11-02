@@ -1,0 +1,10 @@
+select host_name||'['||(select min(substr(value,7)) from configurations c
+                          where conf_name='IP Address' and value like '10.19.%' and host_name=t.host_name
+                          and check_time=(select max(check_time) from configurations where host_name=c.host_name 
+                          and conf_name=c.conf_name))
+                 ||']' hn,
+	decode(subclass,'AIX','','Linux','',subclass)||' '||conf_name||
+	' changed from '||old_value||' to '||new_value||' @'||
+	to_char(modify_time-(select difference/24/3600 from check_datetime where host_name=t.host_name),'hh24:mi') msg
+from conf_modifications t
+where modify_time-(select difference/24/3600 from check_datetime where host_name=t.host_name)>sysdate-5/1440

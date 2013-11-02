@@ -1,0 +1,30 @@
+#?/bin/sh
+
+if [[ $# -lt 1 ]];then
+	echo please specify the workfolder.
+	exit 1
+fi
+
+workfolder=$1
+cd $workfolder
+nohup sh get_newly_released_agent > get_newly_released_agent.log 2>&1 &
+
+#rm -f $workfolder/tmp/*.conf.tmp
+
+if [[ `ps -ef|grep smartmon|grep -v grep|grep smartmon_sqlplus|wc -l|awk '{print $1}'` -gt 10 ]];then
+  ps -ef|grep smartmon|grep -v grep|grep smartmon_sqlplus|awk '{print $2}'|xargs kill -9
+fi
+
+
+#if [[ `date +"%Y%m%d"` != "20111106" ]];then
+nohup sh smartmon_basic ./ > smartmon_basic.log.`date +"%H:%M"` 2>&1 &
+#fi
+find . -name "smartmon_basic.log.*" -mtime +1 -exec rm -f {} \;
+
+if [[ `date +"%H%M"` == "0000" ]];then
+	if [[ -f sqlnet.log ]];then
+		rm -f sqlnet.log
+	fi
+fi
+
+exit 0

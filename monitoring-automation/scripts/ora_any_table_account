@@ -1,0 +1,29 @@
+if [[ -f ~/.profile ]];then
+	. ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+	. ~/.bash_profile 
+fi
+
+sqlplus -s "/as sysdba" <<! |awk '{if(NF==3)print $1 " " $3" "$2}'
+col p format a50
+col username format a30
+set pages 9999
+set lines 200
+set feedback off
+set heading off
+
+select username, account_status, replace(privilege,' ','_') p from
+(
+  select u.username, u.ACCOUNT_STATUS, 'Direct' grant_type, '' role, sp.privilege, sp.admin_option
+    from dba_users u, dba_sys_privs sp
+  where u.username = sp.grantee
+  union
+  select u.username, u.ACCOUNT_STATUS, 'Indirect' grant_type, r.granted_role, sp.privilege, sp.admin_option
+    from dba_users u, dba_role_privs r, dba_sys_privs sp
+  where u.username = r.grantee and r.granted_role = sp.grantee
+)
+where username not in ( 'SYS', 'SYSTEM' )
+  and privilege in ( 'SELECT ANY TABLE', 'UPDATE ANY TABLE', 'DELETE ANY TABLE' )
+order by username, GRANT_type, role, privilege;
+
+!

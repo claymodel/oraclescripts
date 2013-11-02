@@ -1,0 +1,12 @@
+if [[ -f ~/.profile ]];then
+  . ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+  . ~/.bash_profile
+fi
+
+#echo 'select instance_name,version from v$instance;'|sqlplus -s "/ as sysdba"|awk '{if(NF==2&&$1!="INSTANCE_NAME"&&substr($1,1,2)!="--")print $1,$2,"'$ORACLE_HOME'"}'
+
+{ 
+ echo 'set lines 200'; 
+ echo 'select instance_name,version from v$instance;' 
+}|sqlplus -s "/ as sysdba"|awk '{if(NF==2&&$1!="INSTANCE_NAME"&&substr($1,1,2)!="--")print $1,$2,"'$ORACLE_HOME'"}'

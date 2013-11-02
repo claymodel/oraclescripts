@@ -1,0 +1,9 @@
+DEVICE=lo:1
+IPADDR=10.254.254.254
+NETMASK=255.255.255.0
+NETWORK=10.254.254.0
+# If you're having problems with gated making 127.0.0.0/8 a martian,
+# you can change this to something else (255.255.255.255, for example)
+BROADCAST=10.255.255.255
+ONBOOT=yes
+NAME=loopback

@@ -1,0 +1,72 @@
+.\" <rcs id>
+.TH osql 1 "January 20, 2013" "Dennis Koegel" "OSQL - Oracle DBA shell"
+
+.SH NAME
+.B osql
+- Oracle DBA shell
+.SH SYNOPSIS
+.B osql
+
+.SH DESCRIPTION
+.B osql
+is an Oracle command-line interface alternative to the stock
+.B sqlplus
+shell.
+.PP
+Especially "modern" UNIX conveniences like
+.B readline
+input and dynamic output formatting are the main focus. Furthermore,
+.B osql
+is aimed at DBAs and provides several shortcuts for common tasks.
+.PP
+Functionality for normal users may be implemented later, but currently
+is not the primary goal. Currently, it's not even possible to logon
+as user (i.e., without preliminary or SYSDBA authentication).
+.PP
+.B osql
+works interactively only. This will change to support input from
+files and
+.I stdin
+later.
+
+.SH OPTIONS
+No options.
+
+.SH "INTERNAL COMMANDS"
+The interactive shell recognizes several internal commands, e.g.
+.B SHUTDOWN
+and several aliases for DBA-centric SQL commands. Use
+.B \e?
+at the interactive prompt to get a complete list.
+
+.SH FILES
+.IP "$HOME/.osql_history"
+Location to store
+.BR readline 's
+command history.
+
+.SH "WRAPPER SCRIPT"
+.B osql
+is actually a shell wrapper script that tries to guess a sensible
+.I LD_LIBRARY_PATH
+and then calls
+.BR osql.bin ,
+the actual binary.
+
+
+.SH ENVIRONMENT
+.IP ORACLE_HOME
+The wrapper script uses
+.I ORACLE_HOME
+to determine the appropriate
+.I LD_LIBRARY_PATH
+to use when starting
+.BR osql .
+
+The actual binary uses the standard Oracle Client library, which uses
+.I ORACLE_HOME
+for establishing the Oracle connection or, in the case of preliminary
+authentication, to locate files necessary for startup.
+
+.IP ORACLE_SID
+Used to indicate which SID shall be connected to.

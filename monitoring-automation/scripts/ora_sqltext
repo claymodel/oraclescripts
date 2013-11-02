@@ -1,0 +1,43 @@
+#!/bin/sh
+
+if [[ -f ~/.profile ]];then
+	. ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+	. ~/.bash_profile
+fi
+
+if [[ "$ORACLE_SID" == "" || "$ORACLE_HOME" == "" ]];then
+	echo "Oracle_Envierments_Not_Set"
+	exit 1
+fi
+
+INST_VERSION=`echo 'select version from v$instance;'|sqlplus -s "/as sysdba"|awk '{if(NF>0)print}'|tail -1`
+if [[ "$INST_VERSION" != "" ]];then
+   main_version=`echo $INST_VERSION|awk '{print $1}' FS='.'`
+   if [[ "$main_version" == '9' ]];then
+     sqlplus -s "/as sysdba" <<!|awk '{if(NF>=4){for(i=1;i<NF;i++)printf("%s",$i" "); printf("%s",$NF"\n")}}'
+	set heading off
+	set lines 9999
+	set pages 9999 
+	set feedback off
+	set serveroutput off
+     select s.sql_hash_value,'unknown', t.COMMAND_TYPE, t.piece, t.sql_text 
+     from v\$session s, v\$sqltext t
+     where s.status='ACTIVE' and s.sql_hash_value=t.hash_value and s.sql_address=t.address
+     ;
+!
+  else
+     sqlplus -s "/as sysdba" <<!|awk '{if(NF>=4){for(i=1;i<NF;i++)printf("%s",$i" "); printf("%s",$NF"\n")}}'
+        set heading off
+        set lines 9999
+        set pages 9999
+        set feedback off
+        set serveroutput off
+     select s.sql_hash_value, t.sql_id, t.COMMAND_TYPE, t.piece, t.sql_text
+     from v\$session s, v\$sqltext t
+     where s.status='ACTIVE' and s.sql_hash_value=t.hash_value and s.sql_address=t.address
+     ;
+!
+
+  fi
+fi

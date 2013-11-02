@@ -1,0 +1,23 @@
+#!/bin/sh
+
+if [[ $# -lt 1 ]];then
+	echo Please specify the month number in at least 6 digital characters.
+	exit 1
+fi
+
+month=`echo $1|awk '{print substr($1,5,2)}'`
+year=`echo $1|awk '{print substr($1,1,4)}'`
+
+lastday=31
+if [[ "$month" == "04" || "$month" == "06" || "$month" == "09" || "$month" == "11" ]];then
+	lastday=30
+elif [[ "$month" == "02" ]];then
+	lastday=28
+	if [[ `expr $year % 4` == 0 ]];then
+		lastday=29
+	fi
+else
+	lastday=0
+fi
+
+echo $lastday

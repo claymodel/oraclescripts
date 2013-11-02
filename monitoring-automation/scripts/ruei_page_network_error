@@ -1,0 +1,9 @@
+host_name=`hostname`
+
+if [[ "$host_name" == "ruei1a" ]];then
+   sh scripts/ruei_export localhost/ruei 10223
+elif [[ "$host_name" == "ruei2b" ]];then
+   sh scripts/ruei_export localhost/ruei 10162
+elif [[ "$host_name" == "ruei3b" ]];then
+   sh scripts/ruei_export localhost/ruei 10180
+fi

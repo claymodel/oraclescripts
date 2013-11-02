@@ -1,0 +1,26 @@
+if [[ -f ~/.profile ]];then
+        . ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+        . ~/.bash_profile
+fi
+
+if [[ "$ORACLE_HOME" == "" || "$ORACLE_SID" == "" ]];then
+        echo Oracle_Envierment_Not_specified
+        exit 1
+fi
+
+workfolder="/ggs"
+
+host_name=`hostname`
+
+if [[ `echo "$host_name"|awk '{if(match($1,"yy")>0||match($1,"tdbyj")>0) print "a"; else print "b"}'` == "a" ]];then
+	workfolder="/oracle/ggs"
+fi
+
+if [[ $host_name == 'yy3a' ]];then workfolder=/arch5/ggs ; fi
+if [[ $host_name == 'c4oyy3a' ]];then workfolder=/ggs/ggs ; fi
+
+cd $workfolder
+./ggsci <<!|awk '{if($1=="MANAGER"||$1=="EXTRACT"||$1=="REPLICAT"){printf substr($1,1,30)" "substr($2,1,30)" ";if(NF==2)print "0 0 0";else print substr($3,1,30)" "substr($4,1,30)" "substr($5,1,30);}}'
+info all
+!

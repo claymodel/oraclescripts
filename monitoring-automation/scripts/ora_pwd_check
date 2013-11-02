@@ -1,0 +1,35 @@
+#!/usr/bin/ksh
+
+if [[ -f ~/.bash_profile ]];then 
+  . ~/.bash_profile
+elif [[ -f ~/.profile ]];then
+  . ~/.profile
+fi
+
+function check_login {
+if [[ $# -lt 2 ]];then
+  exit
+fi
+
+username=$1
+password=$2
+
+if [[ `echo "select sysdate from dual;"|sqlplus $username/$password|grep "ORA-01017: invalid username/password; logon denied"|wc -l|awk '{print $1}'` == 0 ]];then
+  echo "$username $password logged_in"
+else
+  echo "$username $password invalid"
+fi
+
+}
+
+for username in `echo "select lower(username) from dba_users where account_status not like '%LOCK%' and profile!='WH_PROFILE'  order by 1;"|sqlplus -s "/as sysdba"|awk '{if(NF>0){if(substr($1,1,2)!="--"&&substr($1,1,1)!="L")print $1}}'|sed '$d'`; do
+
+   upperPwd=`echo $username|awk '{print toupper($1)}'`
+   for pwd in $username $username$username $upperPwd ${upperPwd}123 ${upperPwd}1234 ${upperPwd}_123 ${upperPwd}_1234 ${upperPwd}1 ${username}123 ${username}1234 abc123 abc1234 abc_123 abc_1234 abc321 abc4321 ${username}1 ; do
+
+   check_login $username $pwd
+   sleep 1
+
+  done
+done 
+

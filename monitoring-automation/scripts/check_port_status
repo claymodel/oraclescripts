@@ -1,0 +1,51 @@
+
+if [[ $# -lt 2 ]];then 
+	exit 1
+fi
+
+ip=$1
+port=$2
+
+#echo "main process id = $$"
+
+logfile=tmp.check_port_status.log
+
+scriptfile=tmp.check_port_status.script
+
+echo 'echo $$'>$scriptfile
+echo "telnet $ip $port  <<!">>$scriptfile
+echo 'quit'>>$scriptfile
+echo '!'>>$scriptfile
+echo 'echo "finished"' >>$scriptfile
+
+nohup sh $scriptfile >  $logfile 2>&1 &
+
+sleep 2
+
+process_id=`head -1 $logfile`
+
+#echo "child process id = $process_id"
+
+#echo ""
+
+line=`cat $logfile|tail -1|awk '{print $1}'`
+
+if [[ "$line" != "finished" ]];then
+	if [[ "$process_id" != "" ]];then
+		echo "blocked"
+		#echo ""
+		#echo "kill child process $process_id"
+		ps -ef|grep tmp.check_port_status.script|grep -v grep|awk '{if($2=="'$process_id'")print $2}'|xargs kill -9
+	fi
+elif [[ `cat $logfile|grep -i "refused"|wc -l|awk '{print $1}'` -gt 0 ]];then
+	echo "closed"
+elif [[ `cat $logfile|grep -i "connected"|wc -l|awk '{print $1}'` -gt 0 ]];then
+	echo "open"
+elif [[ `cat $logfile|grep -i "Connection closed by foreign host"|wc -l|awk '{print $1}'` -gt 0 ]];then
+	echo "open"
+fi
+
+#echo ""
+#cat $logfile
+
+rm -f $logfile $scriptfile

@@ -1,0 +1,92 @@
+
+if [[ $# -lt 4 ]];then 
+	exit 1
+fi
+
+groupName=$1
+groupStartedList=$2
+groupStatusFile=$3
+groupResultfile=$4
+
+programName=$0
+
+processes=`ps -ef|grep "sh $programName $groupName "|grep -v grep|wc -l|awk '{print $1}'`
+if [[ "$processes" -gt 10 ]];then
+	echo waiting $processes processes to complete
+	exit 2
+fi
+
+if [[ ! -f $groupStartedList ]];then
+	echo  group started list file $groupStartedList does not existe
+	exit 3
+fi
+
+maxWaitSeconds=600
+waitedSeconds=0
+ALL_FINISH=false
+while [[ "$ALL_FINISH" == false && $waitedSeconds -lt $maxWaitSeconds ]];do
+	ALL_FINISH=true
+	if [[ -f $groupStatusFile ]];then
+		i=1
+		lcnt=`cat $groupStartedList|wc -l|awk '{print $1}'`
+		while [[ $i -le $lcnt ]];do
+			startedItem=`cat $groupStartedList|head -$i|tail -1`
+			j=1
+			tmpl=`cat $groupStatusFile|wc -l|awk '{print $1}'`
+			tmpin=false
+			while [[ $j -le tmpl ]];do
+				statusItem=`cat $groupStatusFile|head -$j|tail -1`
+				if [[ "$statusItem" == "$startedItem" && "$statusItem" != "" ]];then
+					tmpin=true
+					j=`expr $tmpl + 1`
+				fi
+				j=`expr $j + 1`
+			done
+			if [[ "$tmpin" == "false" ]];then
+				ALL_FINISH=false
+				i=`expr $lcnt + 1`
+			fi
+			i=`expr $i + 1`
+		done
+	else
+		ALL_FINISH=false
+	fi
+	if [[ "$ALL_FINISH" == false ]];then
+		waitedSeconds=`expr $waitedSeconds + 1`
+		sleep 1
+	fi
+done
+
+db_conn_cfg=db_conn.cfg
+
+echo =============================
+echo group=$groupName ALL_FINISH=$ALL_FINISH waitedSeconds=$waitedSeconds
+echo -----------------------------
+echo groupStartedList=$groupStartedList
+cat $groupStartedList
+echo -----------------------------
+echo groupStatusFile=$groupStatusFile
+cat $groupStatusFile
+echo -----------------------------
+echo groupResultfile=$groupResultfile
+cat $groupResultfile
+
+
+insert_sql=${groupResultfile}.transfer.sql
+sh ./insert $groupName $groupResultfile > $insert_sql
+echo -----------------------------
+cat $insert_sql
+for target in alert report ; do
+echo -----------------------------
+echo $target
+	db_conn=`awk '{if($1=="'$target'"){for (i=2;i<NF;i++)printf $i " "; print $NF}}' $db_conn_cfg|
+		sed 's/sqlplus /\.\/smartmon_sqlplus /g'`
+	$db_conn <<!
+		set echo on
+		set feedback on
+		@$insert_sql
+		commit;
+		exit;
+!
+done
+rm -f $insert_sql $groupStartedList $groupStatusFile $groupResultfile

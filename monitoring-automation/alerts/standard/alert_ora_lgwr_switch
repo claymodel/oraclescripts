@@ -1,0 +1,22 @@
+select host_name||'['||(select min(substr(value,7)) from configurations c
+                          where conf_name='IP Address' and value like '10.19.%' and host_name=t.host_name
+                          and check_time=(select max(check_time) from configurations where host_name=c.host_name
+                          and conf_name=c.conf_name))
+                 ||']' hn,
+        'LGWR switch at '||to_char(end_time,'hh24:mi')||' in '||seconds||' seconds' msg
+from (
+select x.host_name,
+                         y.alert_time end_time,
+       round((y.alert_time-x.alert_time)*86400) seconds
+from
+(select rownum n, b.*   from
+(select * from snap_ora_alert where content like '%Thread % advanced to log sequence %'
+ order by host_name, alert_time, line, check_time) b) x,
+(select rownum n, b.*   from
+(select * from snap_ora_alert where content like '%Thread % advanced to log sequence %'
+ order by host_name, alert_time, line, check_time) b) y
+where x.host_name=y.host_name and x.n+1=y.n
+and y.alert_time = (select max(alert_time)
+ from snap_ora_alert where host_name=x.host_name
+ and content like '%Thread % advanced to log sequence %')
+) t where seconds<0 and end_time>=sysdate-5/1440

@@ -1,0 +1,26 @@
+#!/bin/sh
+if [[ -f ~/.profile ]];then
+	. ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+	. ~/.bash_profile
+fi
+
+check_mins=1
+perl_script_folder=scripts
+if [[ $# -ge 1 ]];then
+	check_mins=$1
+fi
+
+cd $perl_script_folder
+
+bdump_path=`echo "select value from v\\$parameter where name='background_dump_dest';"|sqlplus -s "/as sysdba"|awk '{if(NF>0)print}'|tail -1`
+instance_name=`echo "select instance_name from v\\$instance ;"|sqlplus -s "/as sysdba"|awk '{if(NF>0)print}'|tail -1`
+alertlog_file=$bdump_path/alert_$instance_name.log
+
+if [[ -f "$alertlog_file" ]];then
+
+	perl ora_alertlog.pl $check_mins $alertlog_file
+else
+	echo Cannot open alert log file: $alertlog_file
+	exit 1
+fi

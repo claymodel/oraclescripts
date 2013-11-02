@@ -1,0 +1,7 @@
+{ 
+  lsvg -o|grep -v root|grep -v fs|xargs lsvg -l|grep closed|grep -v redo|grep -v log|grep -v spfile|grep -v fs|wc -l 
+}|read a
+{ 
+  for x in `lsvg -o|grep -v root|grep -v fs|xargs lsvg -l|grep closed|grep -v redo|grep -v log|grep -v spfile|grep -v fs|awk '{print $1}'`;do lslv $x|awk '{if($4=="PP" && $5=="SIZE:")printf $6"*";else if($3=="PPs:")print $4;}'|bc;done|awk '{sum+=$1}END{print sum/1024}' 
+}|read b
+echo $a $b

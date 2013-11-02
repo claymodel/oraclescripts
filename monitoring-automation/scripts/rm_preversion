@@ -1,0 +1,20 @@
+header=""
+if [[ `uname` == 'Linux' ]];then
+	header="/home"
+	if [[ `echo $HOSTNAME|awk '{print substr($1,1,4)}'` != "atae" ]];then
+		header="/opt"
+	fi
+fi
+for folder in "${header}/oracle/sunl_mon";do
+	if [[ -d $folder ]];then
+        	echo "$USER $folder "|awk '{printf $0}'
+        	du -sm $folder|awk '{printf $1" "}' 2>/dev/null
+        	find $folder -name "*" -print|wc -l|awk '{printf $1" "}' 2>/dev/null
+		if [[ `hostname` != "ls2" && `hostname` != "ls1" ]];then
+			rm -rf $folder
+			echo $?	
+		else
+			echo not
+		fi
+	fi
+done

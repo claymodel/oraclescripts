@@ -1,0 +1,473 @@
+version: 1
+
+dn: dc=example,dc=com
+objectClass: domain
+objectClass: top
+dc: example
+
+dn: ou=People,dc=example,dc=com
+objectClass: organizationalunit
+objectClass: top
+ou: People
+
+dn: ou=Groups,dc=example,dc=com
+objectClass: organizationalUnit
+objectClass: top
+ou: Groups
+
+dn: uid=user.0,ou=People,dc=example,dc=com
+objectClass: person
+objectClass: inetorgperson
+objectClass: organizationalperson
+objectClass: top
+cn: Aaccf Amar
+sn: Amar
+description: This is the description for Aaccf Amar.
+employeeNumber: 0
+givenName: Aaccf
+homePhone: +1 225 216 5900
+initials: ASA
+l: Panama City
+mail: user.0@maildomain.net
+mobile: +1 010 154 3228
+pager: +1 779 041 6341
+postalAddress: Aaccf Amar$01251 Chestnut Street$Panama City, DE  50369
+postalCode: 50369
+st: DE
+street: 01251 Chestnut Street
+telephoneNumber: +1 685 622 6202
+uid: user.0
+userPassword:: e1NTSEF9N1MzeEVVeDJSTUc1OUFqcmRpZ2RIdFBTWHFkTG0zT3VDQm9FbXc9P
+ Q==
+
+dn: uid=user.1,ou=People,dc=example,dc=com
+objectClass: oblixorgperson
+objectClass: person
+objectClass: organizationalperson
+objectClass: oblixPersonPwdPolicy
+objectClass: inetorgperson
+objectClass: top
+cn: Aaren Atp
+sn: Atp
+description: This is the description for Aaren Atp.
+employeeNumber: 1
+givenName: Aaren
+homePhone: +1 280 375 4325
+initials: ALA
+l: New Haven
+mail: user.1@maildomain.net
+mobile: +1 680 734 6300
+oblastfailedlogin: 2012-06-20T09:37:30Z
+oblastsuccessfullogin: 2012-06-20T14:15:15Z
+oblogintrycount: 0
+obpasswordcreationdate: 2012-01-01T13:08:58Z
+pager: +1 850 883 8888
+postalAddress: Aaren Atp$70110 Fourth Street$New Haven, OH  93694
+postalCode: 93694
+st: OH
+street: 70110 Fourth Street
+telephoneNumber: +1 390 103 6917
+uid: user.1
+uid: user.1@maildomain.net
+userPassword:: e1NTSEF9M2ttenV1ampKRTFmTngyTXFETmVvbkRqU1dreUNXQkt1cXNuS1E9P
+ Q==
+
+dn: uid=user.2,ou=People,dc=example,dc=com
+objectClass: oblixorgperson
+objectClass: person
+objectClass: organizationalPerson
+objectClass: oblixPersonPwdPolicy
+objectClass: inetorgperson
+objectClass: top
+cn: Aarika Atpco
+sn: Atpco
+description: This is the description for Aarika Atpco.
+employeeNumber: 2
+givenName: Aarika
+homePhone: +1 003 428 0962
+initials: AOA
+l: New Orleans
+mail: user.2@maildomain.net
+mobile: +1 279 618 3901
+oblastfailedlogin: 2012-06-19T19:42:04Z
+oblastsuccessfullogin: 2012-06-19T19:42:10Z
+oblogintrycount: 0
+obpasswordcreationdate: 2012-06-19T19:41:16Z
+pager: +1 053 688 9803
+postalAddress: Aarika Atpco$00900 Maple Street$New Orleans, KS  10857
+postalCode: 10857
+st: KS
+street: 00900 Maple Street
+telephoneNumber: +1 757 462 0301
+uid: user.2
+userPassword:: e1NTSEF9MHlqNThZd3NEMXF3Q0w2MG5aay9neS9iNEsvcWwvcWw5TXBxcHc9P
+ Q==
+
+dn: uid=user.3,ou=People,dc=example,dc=com
+objectClass: oblixorgperson
+objectClass: person
+objectClass: organizationalPerson
+objectClass: oblixPersonPwdPolicy
+objectClass: inetorgperson
+objectClass: top
+cn: Aaron Atrc
+sn: Atrc
+description: This is the description for Aaron Atrc.
+employeeNumber: 3
+givenName: Aaron
+homePhone: +1 332 432 4295
+initials: AKA
+l: Green Bay
+mail: user.3@maildomain.net
+mobile: +1 890 430 9077
+oblastsuccessfullogin: 2012-06-19T19:42:44Z
+oblogintrycount: 0
+obpasswordcreationdate: 2012-06-19T19:42:55Z
+pager: +1 197 025 3730
+postalAddress: Aaron Atrc$59748 Willow Street$Green Bay, TN  66239
+postalCode: 66239
+st: TN
+street: 59748 Willow Street
+telephoneNumber: +1 094 100 7524
+uid: user.3
+userPassword:: e1NTSEF9cml6RTJrR0NkekpDdTl6K2RiSUlURStjVzFjZXJINDFNOHBybVE9P
+ Q==
+
+dn: uid=user.4,ou=People,dc=example,dc=com
+objectClass: person
+objectClass: inetorgperson
+objectClass: organizationalperson
+objectClass: top
+cn: Aartjan Aalders
+sn: Aalders
+description: This is the description for Aartjan Aalders.
+employeeNumber: 4
+givenName: Aartjan
+homePhone: +1 423 009 6628
+initials: ALA
+l: Bryan
+mail: user.4@maildomain.net
+mobile: +1 209 956 9394
+pager: +1 951 150 0057
+postalAddress: Aartjan Aalders$77810 Adams Street$Bryan, NC  72311
+postalCode: 72311
+st: NC
+street: 77810 Adams Street
+telephoneNumber: +1 548 762 2193
+uid: user.4
+userPassword:: e1NTSEF9TkZjamdPRm9OWElnQzZ2NzcyZCt6c2VnWXVZSWE5RWo2YU0ydkE9P
+ Q==
+
+dn: uid=user.5,ou=People,dc=example,dc=com
+objectClass: person
+objectClass: inetorgperson
+objectClass: organizationalperson
+objectClass: top
+cn: Abagael Aasen
+sn: Aasen
+description: This is the description for Abagael Aasen.
+employeeNumber: 5
+givenName: Abagael
+homePhone: +1 563 061 6916
+initials: AHA
+l: Salem
+mail: user.5@maildomain.net
+mobile: +1 516 926 3480
+pager: +1 928 034 3047
+postalAddress: Abagael Aasen$80905 Meadow Street$Salem, NJ  76132
+postalCode: 76132
+st: NJ
+street: 80905 Meadow Street
+telephoneNumber: +1 154 428 0080
+uid: user.5
+userPassword:: e1NTSEF9bS9BSm9UWWxKR1B5MW04ZkYycEdySTV5R0RiSW40Y1RnNytQU2c9P
+ Q==
+
+dn: uid=user.6,ou=People,dc=example,dc=com
+objectClass: person
+objectClass: inetorgperson
+objectClass: organizationalperson
+objectClass: top
+cn: Abagail Abadines
+sn: Abadines
+description: This is the description for Abagail Abadines.
+employeeNumber: 6
+givenName: Abagail
+homePhone: +1 030 104 9024
+initials: ASA
+l: Lynchburg
+mail: user.6@maildomain.net
+mobile: +1 496 091 6823
+pager: +1 431 570 9544
+postalAddress: Abagail Abadines$61394 Adams Street$Lynchburg, MA  68438
+postalCode: 68438
+st: MA
+street: 61394 Adams Street
+telephoneNumber: +1 236 110 4271
+uid: user.6
+userPassword:: e1NTSEF9WjhjT1VodHlFQXN6TGl1Zkh4V2hFaHZDd2R3SXZqSWtxSEJ3cnc9P
+ Q==
+
+dn: uid=user.7,ou=People,dc=example,dc=com
+objectClass: person
+objectClass: inetorgperson
+objectClass: organizationalperson
+objectClass: top
+cn: Abahri Abazari
+sn: Abazari
+description: This is the description for Abahri Abazari.
+employeeNumber: 7
+givenName: Abahri
+homePhone: +1 941 161 6010
+initials: AOA
+l: Hattiesburg
+mail: user.7@maildomain.net
+mobile: +1 005 264 0002
+pager: +1 603 439 2066
+postalAddress: Abahri Abazari$03401 Ninth Street$Hattiesburg, IA  04882
+postalCode: 04882
+st: IA
+street: 03401 Ninth Street
+telephoneNumber: +1 000 800 5137
+uid: user.7
+userPassword:: e1NTSEF9TVc0ejB0WjhWZjJnb3VqTGNPc3ZvOFhxTi84MjNRRjlXQkJYTHc9P
+ Q==
+
+dn: uid=user.8,ou=People,dc=example,dc=com
+objectClass: person
+objectClass: inetorgperson
+objectClass: organizationalperson
+objectClass: top
+cn: Abbas Abbatantuono
+sn: Abbatantuono
+description: This is the description for Abbas Abbatantuono.
+employeeNumber: 8
+givenName: Abbas
+homePhone: +1 884 320 6955
+initials: ADA
+l: Eau Claire
+mail: user.8@maildomain.net
+mobile: +1 407 301 6516
+pager: +1 054 898 2244
+postalAddress: Abbas Abbatantuono$00468 Second Street$Eau Claire, WY  56890
+postalCode: 56890
+st: WY
+street: 00468 Second Street
+telephoneNumber: +1 804 094 3356
+uid: user.8
+userPassword:: e1NTSEF9R3A1YWxHZ3pablArcWxhTjdpVmY0T0xzYktYSVZYL1FId0lCRUE9P
+ Q==
+
+dn: uid=user.9,ou=People,dc=example,dc=com
+objectClass: person
+objectClass: inetorgperson
+objectClass: organizationalperson
+objectClass: top
+cn: Abbe Abbate
+sn: Abbate
+description: This is the description for Abbe Abbate.
+employeeNumber: 9
+givenName: Abbe
+homePhone: +1 104 644 6187
+initials: AEA
+l: Dallas
+mail: user.9@maildomain.net
+mobile: +1 865 856 2932
+pager: +1 015 006 1231
+postalAddress: Abbe Abbate$05257 Tenth Street$Dallas, CT  36027
+postalCode: 36027
+st: CT
+street: 05257 Tenth Street
+telephoneNumber: +1 791 584 7150
+uid: user.9
+userPassword:: e1NTSEF9bk82Wi9RN2tHTjF4dm1yVCtZS25PZTJXZ0lLeW43dUtFN2RUaWc9P
+ Q==
+
+dn: uid=tom.dole,ou=People,dc=example,dc=com
+objectClass: oblixorgperson
+objectClass: person
+objectClass: geoObject
+objectClass: organizationalPerson
+objectClass: oblixPersonPwdPolicy
+objectClass: inetorgperson
+objectClass: top
+cn: Tom Dole
+sn: Dole
+givenName: Tom
+location: 37.443931,-122.160174
+mail: tom.dole@employee.com
+mobile:: IDg1MCA4ODMgODg4OA==
+oblastsuccessfullogin: 2012-07-12T11:41:58Z
+oblogintrycount: 0
+uid: tom.dole
+uid: tom.dole@employee.com
+userPassword:: e1NTSEF9YzRJMjNtSEM5aGEvbWlya3U4SU84TlBEV3RUY05TR0dSRnBWMXc9P
+ Q==
+
+dn: uid=cindy.morton,ou=People,dc=example,dc=com
+objectClass: oblixorgperson
+objectClass: person
+objectClass: geoObject
+objectClass: organizationalPerson
+objectClass: oblixPersonPwdPolicy
+objectClass: inetorgperson
+objectClass: top
+cn: Cindy Morton
+sn: Morton
+givenName: Cindy
+location: 37.529903,-122.265368
+mobile: 390 103 6917
+oblastfailedlogin: 2012-07-09T16:39:00Z
+oblastsuccessfullogin: 2012-07-19T17:16:28Z
+oblogintrycount: 0
+obpasswordcreationdate: 2012-05-01T13:08:58Z
+uid: cindy.morton
+userPassword:: e1NTSEF9OUFMRlhmM1hIWXZ4T0h4UzgzT0MyK0hHUkkzT1k5S2Fscy8ycFE9P
+ Q==
+
+dn: uid=alfie.turner,ou=People,dc=example,dc=com
+objectClass: geoObject
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetorgperson
+objectClass: top
+cn: Alfie Turner
+sn: Turner
+givenName: Alfie
+location: 37.529903,-122.265368
+mobile: 680 734 6300
+uid: alfie.turner
+userPassword:: e1NTSEF9WjZINER4QWhQVDJOK2RxeHdLZlBxUHcyaHBsZjZZTVc0VkQ4ZkE9P
+ Q==
+
+dn: uid=nicole.z.smith,ou=People,dc=example,dc=com
+objectClass: oblixorgperson
+objectClass: person
+objectClass: geoObject
+objectClass: organizationalPerson
+objectClass: oblixPersonPwdPolicy
+objectClass: inetorgperson
+objectClass: top
+cn: Nicole Z. Smith
+sn: Smith
+givenName: Nicole
+mail: nicole.z.smith.0@gmail.com
+mobile: +1 685 622 6202
+uid: nicole.z.smith
+uid: nicole.z.smith.0@gmail.com
+uid: 6856226202
+userPassword:: e1NTSEF9SWRQVDlTWWtIeTIxckZ2cnFQdnpJMXY0RFl3SFAwSlQwRUovc2c9P
+ Q==
+
+dn: uid=keith.warren,ou=People,dc=example,dc=com
+objectClass: oblixorgperson
+objectClass: person
+objectClass: geoObject
+objectClass: organizationalPerson
+objectClass: oblixPersonPwdPolicy
+objectClass: inetorgperson
+objectClass: top
+cn: Keith Warren
+sn: Warren
+givenName: Keith
+uid: keith.warren
+userPassword:: e1NTSEF9UVI4dTAvZDEwSmVjT3NVYkFLVll3TDJIeEl1RVl6QWhaMHo5VFE9P
+ Q==
+
+dn: cn=Employees,ou=Groups,dc=example,dc=com
+objectClass: groupOfUniqueNames
+objectClass: top
+cn: Employees
+uniqueMember: uid=tom.dole,ou=People,dc=example,dc=com
+uniqueMember: uid=cindy.morton,ou=People,dc=example,dc=com
+uniqueMember: uid=alfie.turner,ou=People,dc=example,dc=com
+uniqueMember: uid=keith.warren,ou=People,dc=example,dc=com
+
+dn: cn=Customers,ou=Groups,dc=example,dc=com
+objectClass: groupOfUniqueNames
+objectClass: top
+cn: Customers
+uniqueMember: uid=nicole.z.smith,ou=People,dc=example,dc=com
+uniqueMember: uid=chris.carr,ou=People,dc=example,dc=com
+
+dn: cn=OAAMRuleAdministratorGroup,ou=Groups,dc=example,dc=com
+objectClass: groupofuniquenames
+objectClass: top
+cn: OAAMRuleAdministratorGroup
+description: Administrators of the OAAM Server
+uniqueMember: uid=keith.warren,ou=People,dc=example,dc=com
+
+dn: cn=OAAMCSRGroup,ou=Groups,dc=example,dc=com
+objectClass: groupofuniquenames
+objectClass: top
+cn: OAAMCSRGroup
+uniqueMember: uid=keith.warren,ou=People,dc=example,dc=com
+
+dn: cn=Administrators,ou=Groups,dc=example,dc=com
+objectClass: groupofuniquenames
+objectClass: top
+cn: Administrators
+description: Administrators of the OAM Server
+uniqueMember: uid=keith.warren,ou=People,dc=example,dc=com
+uniqueMember: uid=weblogic,ou=People,dc=example,dc=com
+
+dn: cn=OAAMEnvAdminGroup,ou=Groups,dc=example,dc=com
+objectClass: groupofuniquenames
+objectClass: top
+cn: OAAMEnvAdminGroup
+description: Administrators of the OAAM Server
+uniqueMember: uid=keith.warren,ou=People,dc=example,dc=com
+
+dn: cn=OAAMCSRManagerGroup,ou=Groups,dc=example,dc=com
+objectClass: groupofuniquenames
+objectClass: top
+cn: OAAMCSRManagerGroup
+description: CSR of the OAAM Server
+uniqueMember: uid=keith.warren,ou=People,dc=example,dc=com
+
+dn: cn=OAAMInvestigationManagerGroup,ou=Groups,dc=example,dc=com
+objectClass: groupofuniquenames
+objectClass: top
+cn: OAAMInvestigationManagerGroup
+uniqueMember: uid=keith.warren,ou=People,dc=example,dc=com
+
+dn: cn=OAAMInvestigatorGroup,ou=Groups,dc=example,dc=com
+objectClass: groupofuniquenames
+objectClass: top
+cn: OAAMInvestigatorGroup
+uniqueMember: uid=keith.warren,ou=People,dc=example,dc=com
+uniqueMember: uid=alfie.turner,ou=People,dc=example,dc=com
+
+dn: cn=OAAMSOAPServicesGroup,ou=Groups,dc=example,dc=com
+objectClass: groupofuniquenames
+objectClass: top
+cn: OAAMSOAPServicesGroup
+uniqueMember: uid=keith.warren,ou=People,dc=example,dc=com
+
+dn: uid=chris.carr,ou=People,dc=example,dc=com
+objectClass: geoObject
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetorgperson
+objectClass: top
+cn: Christopher Carr
+sn: Carr
+description: Customer used to help trigger step-up rule
+mail: chris.carr@customer.com
+uid: chris.carr
+uid: chris.carr@customer.com
+userPassword:: e1NTSEF9VnluZVF4TEMvaGFzMGZ0SUJuYVFKSWtlT1RxaGlzZytzbkRjdUE9P
+ Q==
+
+dn: uid=weblogic,ou=People,dc=example,dc=com
+objectClass: geoObject
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetorgperson
+objectClass: top
+cn: Weblogic User
+sn: Weblogic User
+uid: weblogic
+userPassword:: e1NTSEF9Mmd0aFFQb3k4Z1AvUVo4cVJwb2lpT3B4bmlZakh3aENOZXhmcXc9P
+ Q==
+

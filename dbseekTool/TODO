@@ -1,0 +1,20 @@
+- wrapper script: use $1 as ORACLE_SID
+
+- on sql errors: retrieve exact error position and display it
+
+- implement \e
+
+- implement \something for
+  * grants
+
+- re-invent the whole lexing, possibly with yacc
+  (current parsing has a lot of subtle holes)
+
+- make it work with non-tty stdin
+
+- tab completion (maybe read table names, dictionary at start?)
+
+- check / fix handling of SIGSTOP
+
+- [done] save multiline history entries correctly
+

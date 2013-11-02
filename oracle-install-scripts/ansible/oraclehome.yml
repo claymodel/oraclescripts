@@ -1,0 +1,29 @@
+---
+- name: Setup Oracle home dir and environment
+  hosts: demo
+# users: oracle
+  vars_files:
+    - vars/env.yml
+  vars:
+    - base: ./files/oracle
+
+  tasks:
+  - action: file dest=~/bin state=directory
+  - action: template src=templates/env.j2 dest=~/bin/env.sh
+
+  - action: copy src=files/oracle/bash_profile dest=~/.bash_profile mode=0755
+
+  - name: copy bin files
+    action: copy src=files/oracle/bin/$item dest=~/bin/$item mode=0755
+    with_items:
+      - wls
+      - webgateconfig
+      - ohs
+      - oam-policy-export
+
+# Other things to do:
+# yum repos
+# disable SELinux
+
+#  - action: copy src=$or/bin/webgatedest=~/bin/wls mode=0755
+

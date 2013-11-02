@@ -1,0 +1,46 @@
+#?/bin/sh
+
+timestamp=`date +"%y%m%d%H"`
+filename="smartmon${timestamp}.tar"
+echo $filename
+
+rs_defined=false
+echo program name is $0
+tmpstr=`ps -ef|grep $0|grep -v grep|wc -l|awk '{print $1}'`
+echo $tmpstr running release process
+if [[ "$tmpstr" -gt 10 ]]; then
+	ps -ef|grep "get_newly_released_agent"|grep -v grep|grep -v $$|awk '{print $2}'|xargs kill -9
+fi
+
+if [[ -f  release_server.cfg  ]];then
+	if [[ `awk '{if(substr($1,1,1)!="#" && tolower($1)=="ftp")print}' release_server.cfg|wc -l|awk '{print $1}'` -gt 0 ]];then
+		rs_defined=true
+		tmpstr=`awk '{if(substr($1,1,1)!="#" && tolower($1)=="ftp")print}' release_server.cfg`
+		echo $tmpstr
+		server_ip=`echo $tmpstr|awk '{print $2}'`
+		port=`echo $tmpstr|awk '{print $3}'`
+		username=`echo $tmpstr|awk '{print $4}'`
+		passwd=`echo $tmpstr|awk '{print $5}'`
+		path=`echo $tmpstr|awk '{print $6}'`
+		tmpstr=`pwd`
+		ftp -in $server_ip $port <<!
+			user $username $passwd
+			bin
+			passive on
+			cd $path
+			lcd $tmpstr
+			get $filename
+			quit
+!
+		tar xf $filename
+		rm -f $filename
+		rm -f smartmon*.tar
+	fi
+
+fi
+if [[ "$rs_defined" == "false" ]];then
+	echo "No release server defined."
+fi
+
+
+exit 0

@@ -1,0 +1,156 @@
+#! /bin/sh
+
+if [[ $# -lt 1 ]];then
+	echo "Please specify the work folder"
+	exit 1
+fi
+
+date
+
+WorkFolder=$1
+cd $WorkFolder
+
+WorkAreaDir=workarea
+if [[ ! -d $WorkAreaDir ]];then mkdir $WorkAreaDir; fi
+
+if [[ -f ~/.profile ]];then
+       . ~/.profile
+elif [[ -f ~/.bash_profile ]] ;then
+       . ~/.bash_profile
+fi
+
+if [[ ! -f smartmon_sqlplus ]];then
+        if [[ `which sqlplus 2>/dev/null|wc -l|awk '{print $0}'` -eq 1 ]];then
+		sqlplus_path=`which sqlplus`
+		ln -s $sqlplus_path smartmon_sqlplus
+		chmod u+x smartmon_sqlplus
+	else
+		echo "Can't find sqlplus executable."
+		exit 1
+	fi
+fi
+
+tmpruser=`id -un`
+tmpx=`ps -ef|grep "$tmpruser"|grep "sh smartmon_basic"|grep -v grep|wc -l|awk '{print $1}'`
+echo $tmpx running smartmon_basic processes
+
+if [[ "$tmpx" -gt 10 ]];then
+	echo "Wait for extra processes to complete."
+	ps -ef|grep "$tmpuser"|grep "smartmon_sqlplus -s"|grep -v grep|awk '{print $2}'|xargs kill -9
+	ps -ef|grep "$tmpuser"|grep "sh smartmon_basic"|grep -v grep|awk '{print $2}'|xargs kill -9
+fi
+
+CmdFile=cmd.cfg
+ServiceList=service.cfg
+ExecRecFile=execrec.basic.log
+
+# The common sleep time in seconds
+Var1=5
+
+# The interval seconds of each time checking the temp file results
+CheckInterval=2
+
+# Max waiting seconds
+MaxWaitSec=50
+if [[ "$MaxWaitSec" -lt `expr $Var1 \* 2 + 2 + 1` ]];then
+	MaxWaitSec=`expr $Var1 \* 2 + 2 + 1`
+fi
+
+# Timestamp
+Timestamp=`date +"%Y%m%d%H%M%S"`
+
+secTimestamp=`sh ./calcsec`
+
+# HOSTNAME
+HOSTNAME=`hostname`
+
+OS=`uname|awk '{print tolower($0)}'`
+if [[ "$OS" == "linux" ]];then
+	if [[ -f /etc/SuSE-release ]];then
+		OS=suse
+	elif [[ -f /etc/redhat-release ]];then
+		OS=suse
+	fi
+
+	if [[ `echo $PATH|awk '{print match($0,":/sbin")}'` -eq 0 ]];then
+		export PATH=$PATH:/sbin
+	fi
+fi
+
+if [[ ! -d ./tmp ]];then
+	mkdir ./tmp
+fi
+Tmpdir="./tmp"
+
+find $Tmpdir -name "*smon.tmpfile.*" -mtime +1 -exec rm -f {} \;
+find $Tmpdir -name "*.conf.tmp.*" -mtime +1 -exec rm -f {} \;
+
+Tmpfile=${Tmpdir}/smon.tmpfile.$Timestamp
+Groupfile=${Tmpfile}.group
+
+serviceStr="all"
+if [[ -f "$ServiceList" ]];then
+	tmpstr=`cat $ServiceList|awk '{if(substr($1,1,1)!="#" && $1=="'$HOSTNAME'")print $2}'|tail -1`
+	if [[ "$tmpstr" != "" && `echo "$tmpstr"|awk '{print NF}'` == 1 ]];then
+		serviceStr="$tmpstr"
+	fi
+fi
+
+
+backProcCount=0
+echo "OS=$OS"
+for cmdName in `cat $CmdFile|awk '{if(NF>0 && match($1,"#")!=1 && $1!="tabdef" && ($2=="'$OS'" || $2=="*"))print $1}' FS=";"|sort -u`; do
+
+
+	Tmpcmdfile=${Tmpdir}/$cmdName.cmd.tmp
+
+	#intv_coln_Pair=`cat cmd.cfg|awk '{if($1=="'$cmdName'" && ($2=="'$OS'"||$2=="*"))print $3" "$4}' FS=";"|head -1`
+	#execInterval=`echo "$intv_coln_Pair"|awk '{print $1}'`
+	#columns=`echo "$intv_coln_Pair"|awk '{print $2}'`
+
+	execInterval=`cat cmd.cfg|awk '{if($1=="'$cmdName'" && ($2=="'$OS'"||$2=="*"))print $3}' FS=";"|tail -1`
+	columns=`cat cmd.cfg|awk '{if($1=="'$cmdName'" && ($2=="'$OS'"||$2=="*"))print $4}' FS=";"|tail -1`
+	groupName=`cat cmd.cfg|awk '{if($1=="'$cmdName'" && ($2=="'$OS'"||$2=="*"))print $5}' FS=";"|tail -1`
+
+	groupStartedList=${Groupfile}.${groupName}
+	groupStatusFile=${Groupfile}.${groupName}.status
+	groupResultfile=${Groupfile}.${groupName}.result
+
+	inServiceList=false
+	if [[ "$serviceStr" == "all" ]];then
+		inServiceList=true
+	fi
+	if [[ "$inServiceList" == "false" ]];then
+		cmdType=`echo "$cmdName"|cut -d"_" -f 1,2`
+
+		for x in `echo "$serviceStr"|sed 's/;/ /g'`; do
+			if [[ "$cmdType" == "$x" || "$cmdName" == "$x" ]];then
+				inServiceList=true
+			fi
+		done
+	fi
+
+	if [[ "$inServiceList" == "true" ]];then
+		lastSecTimestamp=`sh ./QueryExecRecord basic $cmdName $ExecRecFile`
+
+		if [[ "$secTimestamp" != "" && "$lastSecTimestamp" != "" && `expr $secTimestamp - $lastSecTimestamp` -ge "$execInterval" || "$lastSecTimestamp" == "" ]];then
+			cat cmd.cfg|awk '{if($1=="'$cmdName'" && ($2=="'$OS'" || $2=="*"))print}' FS=';'|cut -d";" -f 6-|sed "s/^/VAR1=$Var1 ;/" > $Tmpcmdfile
+			echo "echo $cmdName >> $groupStatusFile" >>$Tmpcmdfile
+			nohup sh $Tmpcmdfile|sed "s/^/$cmdName $columns $Timestamp /" >> $groupResultfile 2>/dev/null &
+			echo "$cmdName">>$groupStartedList 
+			echo "$groupName $groupStartedList $groupStatusFile $groupResultfile">>$Groupfile
+			#backProcCount=`expr $backProcCount + 1`
+			sh ./UpdateOrCreateExecRecord basic $cmdName $secTimestamp $Tmpdir $ExecRecFile
+echo "$cmdName started"
+		fi
+	fi
+
+done
+
+if [[ -f $Groupfile ]];then
+
+	cat $Groupfile|sort -un|sed 's/^/nohup sh smartmon_transfer /'|awk '{print $0 " >'$WorkAreaDir'/smartmon_transfer."$4".log 2>&1 &"}'>$Tmpfile
+cat $Tmpfile
+	sh $Tmpfile
+fi
+rm -f $Tmpfile $Groupfile

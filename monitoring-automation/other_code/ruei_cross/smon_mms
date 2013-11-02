@@ -1,0 +1,23 @@
+if [[ $# -lt 3 ]];then
+	echo parameter error
+	exit 1
+fi
+
+HAND=$1
+filename=$2
+Title=$3
+
+if [[ -f $filename ]];then
+if [[ `cat $filename|wc -l|awk '{print $1}'` -gt 0 ]];then
+	
+	content=""
+	cat $filename|while read temp ; do
+                #temp=`echo "$temp"|sed 's/xXx/ /g'|sed 's/ /  /g'`
+                temp=`echo "$temp"`
+		content="$content$temp\r\n"
+	done
+
+	tmpstr=`echo "$content"`
+     	./sendmms $HAND $Title "$tmpstr"
+fi
+fi

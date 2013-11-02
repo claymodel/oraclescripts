@@ -1,0 +1,39 @@
+#!/usr/bin/env python
+#################################notes#################################
+# updates the hosts file,with the current ip address      #
+#                               ~configure~                           #
+# hosts = '/etc/hosts' = location of hosts file                       #
+# interface = 'ath0|wlan0|etc0' = name of the inerface to poll        #
+#######################################################################
+import re
+from subprocess import PIPE, Popen
+
+hosts = '/tmp/hosts'
+interface = 'eth0'
+
+handle = open(hosts, 'r')
+hbuf = handle.read()
+handle.close()
+ibuf = Popen(['ifconfig', interface], stdout=PIPE).stdout.read()
+ipat = re.compile('inet addr:(\d+\.\d+\.\d+\.\d+) ')
+ip = ipat.search(ibuf)
+ip = ip and ip.group(1)
+hpat = re.compile('(.*\D)(\d+\.\d+\.\d+\.\d+)(.*#ip~up#.*)', re.DOTALL)
+ih = hpat.search(hbuf)
+if ih and ip:
+  if ip != ih.group(2):
+    try:
+      out = ih.group(1) + ip + ih.group(3)
+      handle = open(hosts, 'w')
+      handle.write(out)
+      print 'updated ip address to', ip
+    except:
+      print 'failed to update hosts file,'
+      print 'maybe you don\'t have permision to write to', hosts
+  else:
+    print hosts, 'is already up to date'
+else:
+  ih = ih and ih.group(2)
+  print 'failed to get ip address(es)'
+  print 'old ip(' + hosts + '):', ih
+  print '  new ip(ifconfig):', ip

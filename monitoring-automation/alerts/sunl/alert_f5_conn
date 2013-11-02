@@ -1,0 +1,8 @@
+select host_name hn,
+        t.pool_name||' conn = '||t.current_connects msg
+from ftp_snap_f5_pool t 
+where t.check_time=(select max(check_time) from ftp_snap_f5_pool where host_name=t.host_name)
+and t.pool_name='csp6_agents_pool'
+and (t.current_connects>2000 or t.current_connects=0)
+and  check_time > sysdate-20/24/60
+and host_name in ('boss-bigip-1.f5','f5-1.kfboss.net')

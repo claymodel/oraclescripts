@@ -1,0 +1,45 @@
+#!/bin/sh
+
+if [[ -f ~/.profile ]];then
+	. ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+	. ~/.bash_profile
+fi
+
+if [[ "$ORACLE_SID" == "" || "$ORACLE_HOME" == "" ]];then
+	echo "Oracle_Envierments_Not_Set"
+	exit 1
+fi
+
+sqlplus -s "/as sysdba" <<!|awk '{if(NF>=32){for(i=1;i<NF;i++)printf $i" "; print $NF}}'
+	set heading off
+	set lines 9999
+	set pages 9999 
+	set feedback off
+	set serveroutput off
+
+select *
+from (
+select nvl(p.SPID,0) pid, s.STATUS,s.SID, s.SERIAL# serial, nvl(s.USERNAME,'unknown') dbuser, s.COMMAND cmdtype, to_char(s.LOGON_TIME,'yymmddhh24miss') logon_time, s.LAST_CALL_ET,
+	nvl(s.MACHINE,'unknown') machine, nvl(s.OSUSER,'unknown') osuser, replace(nvl(s.PROGRAM,'unknown'),' ','_') program, nvl(q.HASH_VALUE,-1) hash_value,	
+	nvl(replace(w.EVENT,' ','_'),'unknown') event, nvl(w.SECONDS_IN_WAIT,'-1') seconds_in_wait,
+	-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,000101000000,
+	--nvl(sum(q.EXECUTIONS),-1) executions, nvl(sum(q.DISK_READS),-1) disk_read, nvl(sum(q.BUFFER_GETS),-1) buffer_gets, nvl(sum(q.CPU_TIME),-1) cpu_time, nvl(sum(q.ELAPSED_TIME),-1) elapsed_time,
+	--nvl(sum(q.SORTS),-1) sorts, nvl(sum(q.USERS_EXECUTING),-1) users_executing, nvl(sum(q.LOADS),-1) loads,nvl(sum(q.PARSE_CALLS),-1) parse_calls, nvl(sum(q.ROWS_PROCESSED),-1) rows_processed, nvl(sum(q.FETCHES),-1) fetches,
+	--count(distinct q.OPTIMIZER_MODE) dist_optimiser_modes, count(distinct q.OPTIMIZER_COST) dist_optimizer_costs, 
+	--nvl(max(q.OPTIMIZER_COST),-1) max_optimizer_cost,
+	--nvl(to_char(max(to_date(q.LAST_LOAD_TIME,'yyyy-mm-dd/hh24:mi:ss')),'yymmddhh24miss'),'000101000000') last_load_time,
+	count(distinct r.waiting_session) waiting_sessions, count(distinct r.lock_type) lock_types,
+	nvl(q.SQL_TEXT,'unknown') sql_text
+from v\$session s, v\$process p, v\$sql q, v\$session_wait w, dba_waiters r 
+where s.SID=w.SID(+) 
+and decode(s.sql_hash_value,0,s.PREV_HASH_VALUE,s.sql_hash_value)=q.HASH_VALUE(+)
+and s.SID=r.holding_session(+)
+and s.PADDR=p.ADDR(+) and s.TYPE='USER'	and s.USERNAME is not null
+group by nvl(p.SPID,0),s.status, s.SID, s.SERIAL#, nvl(s.USERNAME,'unknown') , s.COMMAND, s.LOGON_TIME, s.LAST_CALL_ET,
+nvl(s.MACHINE,'unknown'), nvl(s.OSUSER,'unknown'), replace(nvl(s.PROGRAM,'unknown'),' ','_'),nvl(q.HASH_VALUE,-1),
+nvl(q.SQL_TEXT,'unknown'), nvl(replace(w.EVENT,' ','_'),'unknown'), nvl(w.SECONDS_IN_WAIT,'-1')
+)	t	
+where t.status='ACTIVE' 
+;
+!

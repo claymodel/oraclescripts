@@ -1,0 +1,22 @@
+select host_name||'['||(select min(substr(value,7)) from configurations c
+                          where conf_name='IP Address' and value like '10.19.%' and host_name=t.host_name
+                          and check_time=(select max(check_time) from configurations where host_name=c.host_name 
+			  and conf_name=c.conf_name))
+                 ||']' hn,
+	decode(ora_service,1,null,' instance DOWN!')||
+	decode(open_mode,1,null,' db not open normally.')||
+	decode(listener,0,' listener is down.',null)||
+	decode(user_session, 0, null, decode(latch_free,0,null,' '||latch_free||' latch free.')) ||
+	decode(user_session, 0, null, decode(scattered_read,0,null,' '||scattered_read||' db file scattered read.')) ||
+	decode(trunc(user_session/3950),0,null,' '||user_session||' user sessions. ')||
+	decode(unavailable_indexes,0,null,' '||unavailable_indexes||' unavailable indexes.')||
+	decode(unusable_index_parts,0,null,' '||unusable_index_parts||' unusable index parts.') msg
+from perf_ora_basic t where t.check_time=(select max(check_time) from perf_ora_basic where host_name=t.host_name)
+and  check_time-(select difference from check_datetime where host_name=t.host_name)/3600/24 > sysdate-5/24/60
+and (ora_service!=1 or open_mode!=1 or listener=0 
+or (unavailable_indexes+unusable_index_parts>0 and substr(host_name,length(host_name),1)!='b' and (host_name like '%yy%'))
+or (latch_free>15 and scattered_read > 0 and host_name not in ('ls1','ls2') 
+or user_session>3950
+) 
+and host_name not like '%ruei%'
+)

@@ -1,0 +1,8 @@
+#logdir=`find / -name "*Midware*.log" -print 2>/dev/null|head -1|awk '{for(i=2;i<NF;i++)printf "/"$i;print ""}' FS='/'`
+logdir="/home/dtproxy/midware/bin/log"
+if [[ -d $logdir ]];then
+	cd $logdir
+	for x in `ls Midware*.log`;do
+		perl parse_midware_log.pl $x 
+	done
+fi

@@ -1,0 +1,157 @@
+. ~/.profile
+
+db_conn_cmd=`cat ../../db_conn.cfg|awk '{if($1=="report"){for(i=2;i<NF;i++)printf $i" ";print $NF}}'`
+
+OPTION=`echo "$1"|awk '{print toupper($1)}'` # OPTION=INIT: first time execution;
+DAYS=$2
+HOST_IDENTIFIER=$3
+
+cd /smartmon/MICRO_REPORTS/performance_tuning/
+
+timeStr=""
+if [[ "$DAYS" == "" ]];then DAYS="10"; fi
+if [[ "$DAYS" != "" ]];then 
+  timeStr=" and p.check_time > sysdate - $DAYS" ; 
+fi
+if [[ "$HOST_IDENTIFIER" == "" ]];then HOST_IDENTIFIER='yy'; fi
+
+if [[ "$OPTION" == "INIT" ]];then
+
+$db_conn_cmd <<!
+alter session set db_file_multiblock_read_count= 128;
+alter session enable parallel dml ;
+drop table tmp_top_physi_read_sql;
+Create table tmp_top_physi_read_sql as
+select /*+parallel(10)*/ t.*
+from snap_ora_sp_sql_physical_r t
+where ( t.host_name, t.check_time, t.dbid, t.instance_number, t.begin_snap_id, t.end_snap_id, t.pct_total) in (
+    select p.host_name, p.check_time, p.dbid, p.instance_number, p.begin_snap_id, p.end_snap_id,
+           max(p.pct_total) max_pct
+    from snap_ora_sp_sql_physical_r p
+    where p.host_name like '%$HOST_IDENTIFIER%' $timeStr
+    and (p.dbid,p.instance_number,p.begin_snap_id,p.end_snap_id) in (
+          select w.dbid, w.instance_number, w.begin_snap_id, w.end_snap_id
+          from snap_ora_sp_top_wait_events w
+          where w.host_name=p.host_name and w.event='buffer_busy_waits'
+          and to_number(to_char(w.check_time,'hh24' ) ,'99') between 7 and 18
+        )
+    group by p.host_name, p.check_time, p.dbid, p.instance_number, p.begin_snap_id, p.end_snap_id
+)
+order by t.host_name, t.check_time;
+!
+fi
+
+function top_sql_stats {
+_COL=`echo "$1"|awk '{if(NF>0){print toupper($1)}}'`
+_SQL_HASH_VALUE=$2
+
+if [[ "$_COL" != "HASH_VALUE" || "$_COL" != "SUM_EXEC" || "$_COL" != "SUM_PHYS" || "$_COL" != "AVG_PCT"
+      || "$_COL" != "CNT_SNAPS" || "$_COL" != "CNT_HOSTS" || "$_COL" != "CNT_HOURS" || "$_COL" != "SQL_ID" ]];then
+  if [[ "$_COL" != "HASH_VALUE" && "$_COL" != "SQL_ID" ]];then _COL="HASH_VALUE, SQL_ID, $_COL"; fi
+ {
+  $db_conn_cmd <<!
+    set lines 150 heading off feedback off
+    col host_name format a10
+    select $_COL
+    from (select t.hash_value,
+       sum(t.executions) sum_exec, sum (t.physical_reads) sum_phys,
+       avg(t.pct_total) avg_pct,  count (distinct t.begin_snap_id) cnt_snaps,
+       count(distinct t.host_name) cnt_hosts,count( distinct to_char(t.check_time,'hh24' )) cnt_hours
+    from tmp_top_physi_read_sql t
+    group by    t.hash_value having avg(t.pct_total)>20 and sum(t.executions)/(count (distinct t.begin_snap_id))> 10
+    order by 3 desc) ;
+!
+  }|awk '{if(NF>0)print}'
+fi
+}
+
+function query_sql_distr {
+  _SQL_HASH_VALUE=$1
+  _MODE=$2
+  _moduleStr="replace(t.module,'_',' ') module"
+  if [[ "$_MODE" == "insert" ]];then _moduleStr="t.module" ; fi
+  if [[ "$_SQL_HASH_VALUE" != "" ]];then
+    {
+     $db_conn_cmd <<!
+       set lines 200 pages 200 heading off feedback off
+       col host_name format a10
+       col hash_value format 999999999999
+       col sql_id format a13
+       col module format a50
+       col sum_exec format 9999999
+       col sum_phys format 99999999999999
+       col avg_pct format 99
+       col cnt_snaps format 999
+       col cnt_hours format 99
+       select t.host_name, t.hash_value, t.sql_id, $_moduleStr ,
+              sum(t.executions) sum_exec, sum (t.physical_reads) sum_phys,
+              round(avg(t.pct_total)) avg_pct,  count (distinct t.begin_snap_id) cnt_snaps,
+              count( distinct to_char(t.check_time,'hh24' )) cnt_hours
+       from tmp_top_physi_read_sql t
+       where t.hash_value='$_SQL_HASH_VALUE'
+       group by t.host_name, t.hash_value, t.sql_id, t.module
+       having avg(t.pct_total)>20 and sum(t.executions)/(count (distinct t.begin_snap_id))> 10
+       order by t.host_name, t.hash_value, t.sql_id, t.module
+       ;
+
+!
+   }|awk '{if(NF>0)print}'
+  fi
+}
+
+########## GET TOP SQL #####################
+
+$db_conn_cmd <<! >/dev/null
+--drop table pt_top_physical_read_sql;
+create table pt_top_physical_read_sql (
+  check_time date,
+  last_days number,
+  host_name varchar2(30),
+  hash_value number,
+  sql_id varchar2(13),
+  module varchar2(200),
+  executions number,
+  physical_reads number,
+  pct_total number,
+  snaps number,
+  clocks number,
+  sql_text varchar2(2000)
+);
+
+!
+
+echo "HOST          Hash Value SQL ID        Module                                           Executions  Physical Reads     PCT     Snaps    Clocks"
+echo "----------    ---------- ----------    ----------------------------------------------   ----------  --------------     ---     -----    ------"
+for sql_hash_value in `top_sql_stats hash_value`; do
+  
+  if [[ "$OPTION" != "ONLYSQL" ]];then
+    query_sql_distr $sql_hash_value
+  fi
+  if [[ "$OPTION" != "NOSQL" ]];then
+    sqltext=""
+    { echo "set lines 150 heading off feedback off";
+      echo "select sql_text from ("
+      echo "  select distinct piece, sql_text from snap_ora_sqltext where hash_value='$sql_hash_value' order by piece"
+      echo ");"
+    }|$db_conn_cmd|awk '{if(NF>0)print}'|while read line ; do
+      sqltext="$sqltext$line"
+    done
+    sqltext=`echo $sqltext|awk '{for(i=1;i<NF;i++)printf $i" ";print $NF}'`
+    echo "   SQL TEXT $sql_hash_value:  $sqltext"
+    echo ""
+  fi
+  if [[ "$OPTION" == "INIT" ]];then
+    insertStr=`query_sql_distr $sql_hash_value insert|sed -e "1,$ s/'/''/g; 1,$ s/&/'||chr(38)||'/g; 1,$ s/%/'||chr(37)||'/g"|
+	awk '{printf "insert into pt_top_physical_read_sql values (sysdate, '$DAYS' , ";
+              for(i=1;i<=NF;i++)printf "\047"$i"\047,"}'`
+    if [[ "$sqltext" == "" ]];then sqltext="unknown"; fi;
+    sqltext=`echo "$sqltext"|sed -e "1,$ s/'/''/g; 1,$ s/&/'||chr(38)||'/g; 1,$ s/%/'||chr(37)||'/g"`
+    insertStr="$insertStr substr('$sqltext',1,2000));" 
+    $db_conn_cmd <<! >/dev/null
+     $insertStr
+     commit;
+!
+  fi
+done
+
+

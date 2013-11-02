@@ -1,0 +1,526 @@
+#!/bin/sh
+
+workdir="./"
+checkdate=`date +"%Y%m%d%H"`
+if [[ $# -gt 0 ]];then
+	workdir=$1
+fi
+
+cd $workdir
+
+workdir="$workdir/workarea"
+if [[ ! -d $workdir ]];then mkdir $workdir ; fi
+
+tmpruser=`id -un`
+if [[ `ps -ef|awk '{if($1=="'$tmpruser'"){for(i=2;i<NF;i++)printf $i" ";print $NF}}'|grep "sh "|grep "maindatalife"|grep -v grep|wc -l|awk '{print $1}'` -gt 2 ]];then
+	echo wait for another process to complete
+	exit 9
+fi
+
+if [[ $# -gt 1 ]];then
+	checkdate=$2
+fi
+
+debug=no
+if [[ "$3" != "" ]];then
+	debug=yes
+fi
+
+if [[ -f ~/.profile ]];then 
+	. ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+	. ~/.bash_profile
+fi
+
+db_conn_cfg_file=db_conn.cfg
+alert_db_conn=`awk '{if($1=="alert"){for(i=2;i<NF;i++)printf $i" ";print $NF}}' $db_conn_cfg_file`
+report_db_conn=`awk '{if($1=="report"){for(i=2;i<NF;i++)printf $i" ";print $NF}}' $db_conn_cfg_file`
+
+cmd_config_file=cmd.cfg
+
+alert_datalife_hourly=2
+alert_datalife_daily=2
+datalife_hourly_forward=12
+datalife_daily_forward=2
+###
+
+needrebuild=no
+_start_time=`date +"%s"`
+for target in alert report ; do
+	db_conn=$alert_db_conn
+	if [[ "$target" == "report" ]];then
+		db_conn=$report_db_conn
+	fi
+	tmpfile=$workdir/maintaindatalife.`date +"%Y%m%d%H%M"`.$$.tmp
+	rm -f ${tmpfile}*
+	sqlscript=${tmpfile}.$target.sql
+	tablelist=${tmpfile}.$target.tblist
+	columnlist=${tmpfile}.$target.collist
+	$db_conn <<!
+		set lines 1000
+		set pages 1000
+		set feedback off
+		set serveroutput off
+		set heading off
+		spool $tablelist
+			select table_name from user_tables order by table_name;
+		spool off	
+		spool $columnlist
+			select table_name, column_name, data_type , data_length from user_tab_columns 
+			where table_name in (select table_name from user_tables) order by table_name, column_id;
+		spool off
+!
+	if [[ `cat $tablelist |grep -i "configurations" |wc -l|awk '{print $1}'` -eq 0 ]];then
+		$db_conn <<!
+			create table configurations (
+				HOST_NAME VARCHAR2(30),
+				CREATE_TIME DATE,
+				CHECK_TIME DATE,
+				SUBCLASS VARCHAR2(200),
+				CONF_NAME VARCHAR2(200),
+				VALUE VARCHAR2(200) );
+			exit;
+!
+	fi
+
+	if [[ `cat $tablelist |grep -i "conf_modifications" |wc -l|awk '{print $1}'` -eq 0 ]];then
+		$db_conn <<!
+			create table conf_modifications (
+ 			HOST_NAME VARCHAR2(30),
+ 			MODIFY_TIME DATE,
+ 			SUBCLASS VARCHAR2(200),
+ 			CONF_NAME VARCHAR2(200),
+ 			OLD_VALUE VARCHAR2(200),
+ 			NEW_VALUE VARCHAR2(200) );
+
+			exit;
+!
+	fi
+	
+	if [[ `cat $tablelist |grep -i "alerts" |wc -l|awk '{print $1}'` -eq 0 ]];then
+		$db_conn <<!
+			create table alerts(
+				alert_time date,
+				group_name varchar2(30),
+				message varchar2(200)
+			);
+			exit;
+!
+	fi
+
+	if [[ `cat $tablelist |grep -i "check_datetime" |wc -l|awk '{print $1}'` -eq 0 ]];then
+		$db_conn <<!
+			create table check_datetime (
+				host_name varchar2(30) unique,
+				agent_time date,
+				server_time date,
+				difference number);
+			exit;
+!
+	fi
+
+for table_name in `awk '{if($1=="tabdef")print $2}' FS=";" $cmd_config_file`; do
+	tabdef_line=`awk '{if($1=="tabdef" && $2=="'$table_name'")print}' FS=";" $cmd_config_file`
+	columns=`echo "$tabdef_line"|cut -d";" -f 3`
+	partitioned=`echo "$tabdef_line"|cut -d";" -f 4`
+	hourly=`echo "$tabdef_line"|cut -d";" -f 5`
+		if [[ "$target" == "alert" ]];then
+			hourly=1
+		fi
+	datalife=`echo "$tabdef_line"|cut -d";" -f 6`
+	tmpi=`expr $columns + 6`
+	column_def=`echo "$tabdef_line"|cut -d";" -f 7-$tmpi`
+	tmpi=`expr $tmpi + 1`
+	index_def=`echo "$tabdef_line"|cut -d";" -f ${tmpi}-`
+
+	needrebuild=no
+
+	echo $table_name
+	echo $column_def
+	echo $index_def
+	unique_def=""
+	if [[ "$index_def" != "" ]];then
+        	unique_def=`echo $index_def|awk '{for(i=1;i<=NF;i++){if(substr($i,1,7)=="unique=")print substr($i,9,length($i)-9)}}'`
+		if [[ "$unique_def" != "" ]];then
+			unique_def="host_name,$unique_def"
+			echo "unique constraint: $unique_def"
+		fi
+	fi
+	
+	if [[ `awk '{if(tolower($1)==tolower("'$table_name'"))print "a"; else print "b"}' $tablelist|grep "a"|wc -l|awk '{print $1}'` == 0 ]];then
+		echo "Create Table $table_name in $target Database"
+		echo "create table $table_name (" >>$sqlscript
+		echo " host_name     varchar2(30) , ">>$sqlscript
+		echo " check_time    date ,">>$sqlscript
+		i=0
+		for col in `echo "$column_def"|tr ";" " "`;do
+			i=`expr $i + 1`
+			col_name=`echo $col|cut -d"=" -f 1`
+			col_type=`echo $col|cut -d"=" -f 2`
+			if [[ $i == $columns ]];then
+				if [[ "$unique_def" != "" ]];then
+					echo " $col_name     $col_type ," >>$sqlscript
+					echo " unique ( $unique_def ) )">>$sqlscript
+				else
+					echo " $col_name     $col_type )" >>$sqlscript
+				fi
+			else
+				echo " $col_name     $col_type ," >>$sqlscript
+			fi
+		done
+		if [[ $partitioned == 0 ]];then
+			echo ";">>$sqlscript
+		else
+			echo " partition by range (check_time) (">>$sqlscript
+			starttime=$checkdate
+			timeformat="YYYYMMDDHH24"
+			if [[ $hourly == 0 ]];then #daily
+				starttime=`echo $checkdate|awk '{print substr($1,1,8)}'`
+				timeformat="YYYYMMDD"
+			fi
+			echo " partition pmin values less than (to_date('$starttime','$timeformat')),">>$sqlscript
+			part_count=2
+			if [[ $hourly == 1 ]];then
+				part_count=$datalife_hourly_forward
+			else
+				part_count=$datalife_daily_forward
+			fi
+			i=0
+			tmpstr=$starttime
+			partname=$starttime
+			while [[ $i -lt $part_count ]];do
+				i=`expr $i + 1`
+				tmpdate=`echo $tmpstr|awk '{print substr($1,1,8)}'`
+				tmphour="00"
+				if [[ $hourly == 1 ]];then
+					tmphour=`echo $tmpstr|awk '{print substr($1,9,2)}'`
+					tmphour=`expr $tmphour + 1`
+					if [[ "$tmphour" == "24" ]];then
+						tmphour=0
+						tmpdate=`sh calc_date_tomorrow $tmpdate`
+					fi
+					if [[ $tmphour -lt 10 ]];then
+						tmphour="0"${tmphour}
+					fi
+					tmpstr=${tmpdate}${tmphour}
+				else
+					tmpdate=`sh calc_date_tomorrow $tmpdate`
+					tmpstr=$tmpdate
+				fi
+				
+				if [[ $i != $part_count ]];then
+					echo " partition p$partname values less than (to_date('$tmpstr','$timeformat')),">>$sqlscript
+				else
+					echo " partition p$partname values less than (to_date('$tmpstr','$timeformat')));">>$sqlscript
+				fi
+				partname=$tmpstr
+			done
+		fi
+	else
+		echo Checking columns definition.
+		cat $columnlist|awk '{if(tolower($1)==tolower("'$table_name'")){
+					printf tolower($2)" "tolower($3); 
+					if(tolower($3)=="varchar2") print "("$4")"; else print "";}}'|sed '1,2d' >$tmpfile
+		columns_db=`wc -l $tmpfile|awk '{print $1}'`
+		i=0
+		droppedcolumns=$tmpfile.droped.columns
+		modifiedcolumns=$tmpfile.modified.columns
+		leftcolumns=$tmpfile.left.columns
+		addedcolumns=$tmpfile.added.columns
+		rm -f $droppedcolumns
+		rm -f $modifiedcolumns
+		rm -f $leftcolumns
+		rm -f $addedcolumns
+		while [[ $i -lt $columns_db ]];do
+			i=`expr $i + 1`
+			line=`head -$i $tmpfile|tail -1`
+			db_column_name=`echo $line|awk '{print $1}'`
+			db_column_type=`echo $line|awk '{print $2}'`
+			tmpstr="${db_column_name}=${db_column_type}"
+			if [[ `echo $column_def|awk '{for(i=1;i<=NF;i++)if(tolower($i)=="'$tmpstr'")print "a"; else print "b";}' FS=";"|grep "a"|wc -l|awk '{print $1}'` == 0 ]];then
+				if [[ `echo $column_def|awk '{for(i=1;i<=NF;i++)if(tolower(substr($i,1,index($i,"=")-1))=="'$db_column_name'")print "a";else print "b";}' FS=";"|grep "a"|wc -l|awk '{print $1}'` == 0 ]];then
+					echo "$db_column_name" >>$droppedcolumns
+				else
+					echo "$db_column_name" >>$modifiedcolumns
+					echo "$db_column_name" >>$leftcolumns
+				fi
+			else
+				echo "$db_column_name" >>$leftcolumns
+			fi
+		done
+		for column in `echo $column_def|tr ";" " "`; do
+			column_name=`echo $column|awk '{print tolower($1)}' FS="="`
+			column_type=`echo $column|awk '{print tolower($2)}' FS="="`
+			if [[ `awk '{if($1=="'$column_name'")print "a";else print "b";}' $tmpfile|grep "a"|wc -l|awk '{print $1}'` == 0 ]];then
+				echo "$column_name $column_type" >> $addedcolumns
+			fi
+		done	
+		new_modifiedcolumns=$tmpfile.newmodifiedcolumns;
+		rm -f $new_modifiedcolumns
+		if [[ -f $modifiedcolumns ]];then
+			cat $modifiedcolumns
+			for column in `cat $modifiedcolumns`;do
+				defined_column_type=`echo $column_def|awk '{for(i=1;i<=NF;i++)if(tolower(substr($i,1,index($i,"=")-1))=="'$column'")print tolower(substr($i,index($i,"=")+1))}' FS=";"|tail -1`
+				db_column_type=`awk '{if($1=="'$column'")print $2}' $tmpfile`
+				defined_column_length=`echo $defined_column_type|tr "(" " "|tr ")" " "|awk '{if(NF>1)print $2;else print "0";}'`
+				db_column_length=`echo $db_column_type|tr "(" " "|tr ")" " "|awk '{if(NF>1)print $2;else print "0";}'`
+
+				tmp_defined_column_type=$defined_column_type
+				defined_column_type=`echo $defined_column_type|tr "(" " "|awk '{print $1}'`
+				db_column_type=`echo $db_column_type|tr "(" " "|awk '{print $1}'`
+				echo $defined_column_type $defined_column_length
+				echo $db_column_type $db_column_length
+				if [[ $db_column_type != "varchar2" || $defined_column_type != "varchar2" || $db_column_length -ge $defined_column_length ]];then
+					needrebuild=yes
+				fi
+				echo "$column $tmp_defined_column_type" >> $new_modifiedcolumns
+			done
+			if [[ -f $new_modifiedcolumns ]];then
+				mv $new_modifiedcolumns $modifiedcolumns
+			fi
+		fi
+		i=0
+		left_columns=`wc -l $leftcolumns|awk '{print $1}'`
+		for column in `echo $column_def|awk '{for(i=1;i<=NF;i++)print substr($i,1,index($i,"=")-1)}' FS=";"`;do
+			i=`expr $i + 1`
+			if [[ $i -le $left_columns ]];then
+				if [[ $column != `head -$i $leftcolumns|tail -1` ]];then
+					needrebuild=yes
+				fi
+			fi
+		done
+		echo $needrebuild
+		if [[ $needrebuild == "no" ]];then
+			if [[ -f $droppedcolumns || -f $modifiedcolumns || -f $addedcolumns ]];then
+				>$tmpfile
+				if [[ -f $droppedcolumns ]];then
+					cat $droppedcolumns|sed "s/^/alter table $table_name set unused column /; s/$/;/" >>$tmpfile
+					echo "alter table $table_name drop unused columns;">>$tmpfile
+				fi
+				if [[ -f $modifiedcolumns ]];then
+					cat $modifiedcolumns|sed "s/^/alter table $table_name modify /; s/$/;/" >>$tmpfile
+				fi
+				if [[ -f $addedcolumns ]];then
+					cat $addedcolumns|sed "s/^/alter table $table_name add /; s/$/;/" >>$tmpfile
+				fi
+				cat $tmpfile >>$sqlscript
+				rm -f $tmpfile
+			fi
+		fi
+		rm -f $tmpfile.*.columns
+		echo Checking data life.
+		parts_indb=$tmpfile.indb.parts
+		$db_conn << !
+			set feedback off
+			set serveroutput off
+			set echo off
+			set heading off
+			set pages 9999 
+			set lines 100
+			spool $parts_indb
+			select 'xXx', lower(partition_name) from user_tab_partitions 
+			where lower(table_name)=('$table_name') order by partition_name;
+			spool off
+			exit;
+!
+
+		awk '{if($1=="xXx" && $2!="pmin")print $2}' $parts_indb >$tmpfile && mv $tmpfile $parts_indb
+		parts_indb_cnt=`wc -l $parts_indb|awk '{print $1}'`
+
+		if [[ $partitioned == "1" && $parts_indb_cnt == "0" || $partitioned == "0" && $parts_indb_cnt -gt 0 ]];then
+			needrebuild="yes"
+		elif [[ $partitioned == "1" && $parts_indb_cnt -gt 0 ]];then
+			part_name_length=`awk '{print length($1)}' $parts_indb|sort -n|tail -1`
+			if [[ "$part_name_length" -eq 11 && "$hourly" == "0" || "$part_name_length" -eq 9 && "$hourly" == "1" ]];then
+				needrebuild="yes"
+			else
+				min_part_indb=`head -1 $parts_indb|awk '{print substr($1,2)}'`
+				max_part_indb=`tail -1 $parts_indb|awk '{print substr($1,2)}'` 
+				historylife=$datalife
+				if [[ $target == "alert" ]];then
+					if [[ "$hourly" == "1" ]];then
+						historylife=$alert_datalife_hourly
+					else
+						historylife=$alert_datalife_daily
+					fi
+				fi
+				forwardlife=$datalife_hourly_forward
+				if [[ "$hourly" == "0" ]];then
+					forwardlife=$datalife_daily_forward
+				fi
+				if [[ "$hourly" == "0" ]];then
+					tmpstr=`expr $historylife - 1`
+					tmpcheckdate=`echo $checkdate|awk '{print substr($1,1,8)}'`
+					target_part_min=`sh calc_date_ndays $tmpcheckdate -$tmpstr`
+					tmpstr=`expr $forwardlife - 1`
+					target_part_max=`sh calc_date_ndays $tmpcheckdate $tmpstr`
+					echo min part in db: $min_part_indb , max part in db: $max_part_indb
+					echo min part target: $target_part_min , max part target: $target_part_max
+					tmpstr=$min_part_indb
+					while [[ "$tmpstr" -lt "$target_part_min" ]];do
+						echo "alter table $table_name drop partition p$tmpstr ;" >>$sqlscript
+						tmpstr=`sh calc_date_tomorrow $tmpstr`		
+					done
+					tmpstr=$max_part_indb
+					tmpstr=`sh calc_date_tomorrow $tmpstr`
+					while [[ "$tmpstr" -le "$target_part_max" ]];do
+						tmptomorrow=`sh calc_date_tomorrow $tmpstr`
+						echo "alter table $table_name add partition p$tmpstr values less than (to_date('$tmptomorrow','yyyymmdd'));">>$sqlscript
+						tmpstr=$tmptomorrow
+					done
+					tmpstr=$target_part_max
+					tmpstr=`sh calc_date_tomorrow $tmpstr`
+					while [[ "$tmpstr" -le "$max_part_indb" ]];do
+						echo "alter table $table_name drop partition p$tmpstr ;" >>$sqlscript
+						tmpstr=`sh calc_date_tomorrow $tmpstr`		
+					done
+				else
+					tmpstr=`expr $historylife - 1`
+					tmpdate=`echo $checkdate|awk '{print substr($1,1,8)}'`
+					tmphour=`echo $checkdate|awk '{print substr($1,9,2)}'`
+					i=0
+					while [[ $i -lt "$tmpstr" ]];do
+						tmphour=`expr $tmphour - 1`
+						if [[ "$tmphour" -lt 0 ]];then
+							tmphour=23
+							tmpdate=`sh calc_date_ndays $tmpdate -1`
+						fi
+						i=`expr $i + 1`
+					done
+					if [[ $tmphour -lt 10 ]];then
+						tmphour="0"$tmphour
+					fi
+					target_part_min="${tmpdate}${tmphour}"
+					tmpstr=`expr $forwardlife - 1`
+					tmpdate=`echo $checkdate|awk '{print substr($1,1,8)}'`
+					tmphour=`echo $checkdate|awk '{print substr($1,9,2)}'`
+					i=0
+					while [[ $i -lt "$tmpstr" ]];do
+						tmphour=`expr $tmphour + 1`
+						if [[  $tmphour == 24 ]];then
+							tmphour=0
+							tmpdate=`sh calc_date_tomorrow $tmpdate`
+						fi
+						i=`expr $i + 1`
+					done
+					if [[ $tmphour -lt 10 ]];then
+						tmphour="0"$tmphour
+					fi
+					target_part_max="${tmpdate}${tmphour}"
+
+					tmpstr=$min_part_indb
+					while [[ $tmpstr -lt $target_part_min ]];do
+						echo "alter table $table_name drop partition p$tmpstr ;">>$sqlscript
+						tmphour=`echo $tmpstr|awk '{print substr($1,9,2)}'`
+						tmpdate=`echo $tmpstr|awk '{print substr($1,1,8)}'`
+						tmphour=`expr $tmphour + 1`
+						if [[ $tmphour == 24 ]];then
+							tmphour=0
+							tmpdate=`sh calc_date_tomorrow $tmpdate`
+						fi
+						if [[ $tmphour -lt 10 ]];then
+							tmphour=0"$tmphour"
+						fi
+						tmpstr="${tmpdate}${tmphour}"
+					done
+
+					tmpstr=$max_part_indb
+					tmphour=`echo $tmpstr|awk '{print substr($1,9,2)}'`
+					tmpdate=`echo $tmpstr|awk '{print substr($1,1,8)}'`
+					tmphour=`expr $tmphour + 1`
+					if [[ $tmphour == 24 ]];then
+						tmphour=0
+						tmpdate=`sh calc_date_tomorrow $tmpdate`
+					fi
+					if [[ $tmphour -lt 10 ]];then
+						tmphour=0${tmphour}
+					fi
+					tmpstr=${tmpdate}${tmphour}
+					while [[ $tmpstr -le $target_part_max ]];do
+						tmphour=`echo $tmpstr|awk '{print substr($1,9,2)}'`
+						tmpdate=`echo $tmpstr|awk '{print substr($1,1,8)}'`
+						tmphour=`expr $tmphour + 1`
+						if [[ $tmphour == 24 ]];then
+							tmphour=0
+							tmpdate=`sh calc_date_tomorrow $tmpdate`
+						fi
+						if [[ $tmphour -lt 10 ]];then
+							tmphour=0${tmphour}
+						fi
+						tmpnexthour=${tmpdate}${tmphour}
+						echo "alter table $table_name add partition p$tmpstr values less than (to_date('$tmpnexthour','yyyymmddhh24'));">>$sqlscript
+						tmpstr=$tmpnexthour
+					done
+
+					tmpstr=$target_part_max
+					tmphour=`echo $tmpstr|awk '{print substr($1,9,2)}'`
+					tmpdate=`echo $tmpstr|awk '{print substr($1,1,8)}'`
+					tmphour=`expr $tmphour + 1`
+					if [[ $tmphour == 24 ]];then
+						tmphour=0
+						tmpdate=`sh calc_date_tomorrow $tmpdate`
+					fi
+					if [[ $tmphour -lt 10 ]];then
+						tmphour=0${tmphour}
+					fi
+					tmpstr=${tmpdate}${tmphour}
+					while [[ $tmpstr -le $max_part_indb ]];do
+						echo "alter table $table_name drop partition p$tmpstr ;">>$sqlscript
+						tmphour=`echo $tmpstr|awk '{print substr($1,9,2)}'`
+						tmpdate=`echo $tmpstr|awk '{print substr($1,1,8)}'`
+						tmphour=`expr $tmphour + 1`
+						if [[ $tmphour == 24 ]];then
+							tmphour=0
+							tmpdate=`sh calc_date_tomorrow $tmpdate`
+						fi
+						if [[ $tmphour -lt 10 ]];then
+							tmphour=0${tmphour}
+						fi
+						tmpnexthour=${tmpdate}${tmphour}
+						tmpstr=$tmpnexthour
+					done
+				fi				
+			fi #needrebuild if
+		fi # needrebuild if
+		############
+		if [[ "$needrebuild" == "yes" ]];then
+			new_table_name=${table_name}_${RANDOM}_`date +"%y%m%d%H"`
+			new_table_name=`echo $new_table_name|awk '{print substr($1,1,30)}'`
+			echo "rename $table_name to $new_table_name ;" >>$sqlscript
+		fi
+		echo Checking indexes definition.
+	fi
+	echo ""
+done
+if [[ "$debug" == "no" ]];then
+	$db_conn <<!
+	set echo on
+	@$sqlscript
+	exit;
+!
+	$db_conn <<! |grep "xXxXx"|awk '{if(NF==2)print "alter index "$1" rebuild;";}'>$tmpfile
+	set lines 125
+	set pages 9999
+	set feedback off
+	set heading off
+	select index_name,'xXxXx' from user_indexes
+	where status='UNUSABLE';
+	exit;
+!
+
+if [[ `cat $tmpfile|wc -l|awk '{print $1}'` -gt 0 ]];then
+	$db_conn<<!
+	@$tmpfile
+	exit;
+!
+fi	
+	
+else
+	cat $sqlscript
+fi
+rm ${tmpfile}*
+
+done
+
+_end_time=`date +"%s"`
+echo `expr $_end_time - $_start_time`

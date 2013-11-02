@@ -1,0 +1,18 @@
+#!/bin/sh
+
+LIB="${ORACLE_HOME}/lib"
+LIBCLNT="${LIB}/libclntsh.so"
+
+if test -e "$LIBCLNT"; then
+	LD_LIBRARY_PATH="${LIB}:$LD_LIBRARY_PATH"
+else
+	echo "ERROR:  \$ORACLE_HOME not set or does not contain lib/libclntsh.so." >&2
+	exit 69
+fi
+
+export LD_LIBRARY_PATH
+
+dir=`dirname "$0"`
+
+"${dir}/osql.bin" "$@"
+

@@ -1,0 +1,26 @@
+#! /bin/sh
+
+if [[ $# != 5 ]];then
+	echo "Please specify the record type, name, timestamp in seconds, temp folder and exec record file"
+	exit
+fi
+
+recType=$1
+recName=$2
+secTimestamp=$3
+tmpDir=$4
+execRecFile=$5
+
+tmpfile=${tmpDir}/calcsec.tmp.$$
+rm -f $tmpfile
+
+if [[ -f $execRecFile ]];then
+	line=`awk '{if($1=="'$recType'" && $2=="'$recName'")print $3}' $execRecFile|tail -1`
+	if [[ "$line" != "" ]];then
+		awk '{if($1!="'$recType'" || $2!="'$recName'")print}' $execRecFile >$tmpfile
+		mv $tmpfile $execRecFile
+	fi
+fi
+echo "$recType $recName $secTimestamp">>$execRecFile
+
+rm -f $tmpfile

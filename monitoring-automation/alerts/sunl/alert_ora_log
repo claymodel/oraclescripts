@@ -1,0 +1,8 @@
+select host_name||'['||(select min(substr(value,7)) from configurations c
+                          where conf_name='IP Address' and value like '10.19.%' and host_name=t.host_name
+                          and check_time=(select max(check_time) from configurations where host_name=c.host_name))
+                 ||']',
+        content
+from snap_ora_alert t where
+check_time-(select difference from check_datetime where host_name=t.host_name)/3600/24 > sysdate-5/24/60
+and substr(content,1,4) ='ORA-'	and substr(content,1,9)!='ORA-01555'

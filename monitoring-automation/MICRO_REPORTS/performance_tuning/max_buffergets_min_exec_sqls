@@ -1,0 +1,133 @@
+. ~/.profile
+
+db_conn_cmd=`cat /smartmon/db_conn.cfg|awk '{if($1=="report"){for(i=2;i<NF;i++)printf $i" ";print $NF}}'`
+
+OPTION=`echo "$1"|awk '{print toupper($1)}'`
+DAYS=$2
+HOST_IDENTIFIER=$3
+PARAM1=$4
+PARAM2=$5
+
+#cd /smartmon/MICRO_REPORTS/performance_tuning/
+tmpfile=/smartmon/MICRO_REPORTS/performance_tuning/tmpfile.max_buffergets_min_exec_sqls.tmp
+
+timeStr=""
+if [[ "$DAYS" == "" ]];then DAYS="10"; fi
+if [[ "$DAYS" != "" ]];then 
+  timeStr=" and p.check_time > sysdate - $DAYS" ; 
+fi
+if [[ "$HOST_IDENTIFIER" == "" ]];then HOST_IDENTIFIER='yy'; fi
+if [[ "$PARAM1" == "" ]];then PARAM1='10'; fi
+if [[ "$PARAM2" == "" ]];then PARAM2='10'; fi
+
+MAX_DAYS=`expr $DAYS \* 3`
+
+if [[ "$DAYS" == "0" ]];then
+   DAYS=1
+   MAX_DAYS=1
+fi
+
+if [[ "$OPTION" == "INIT" ]];then
+
+$db_conn_cmd <<!
+drop table tmp_buffer_gets;
+create table tmp_buffer_gets as
+select /*+parallel*/ 
+     host_name, check_time, 
+     decode(b.sql_id,'unknown','hash_value','sql_id') sql_type,
+     decode(b.sql_id,'unknown',to_char(b.hash_value,'999999999999999'), b.sql_id) sql, module,
+     executions, buffer_gets, b.pct_total, b.gets_per_exec
+from snap_ora_sp_sql_buffer_gets b
+where b.executions<100
+and to_number(to_char(b.check_time,'hh24'),'99') between 8 and 17
+and b.check_time>sysdate-$MAX_DAYS
+and b.host_name like '%$HOST_IDENTIFIER%';
+
+drop table tmp_session;
+create table tmp_session as
+select /*+parallel*/
+  *
+from snap_ora_session where host_name like '%$HOST_IDENTIFIER%' and check_time>sysdate-$DAYS;  
+
+insert into pt_top_consuming_min_exec_sql 
+select host_name, 
+       sysdate,
+       '$DAYS' recient_days,
+       '$MAX_DAYS' check_days,
+       count(distinct trunc(check_time,'dd')) days_appear,
+       sql_type,sql, module, 
+       sum(executions) sum_exec,
+       round(avg(executions)) avg_exec, 
+       round(avg(buffer_gets)) avg_buffer_gets
+from tmp_buffer_gets
+where executions<100 and gets_per_exec>1000000
+group by host_name, sql_type, sql, module
+having count(distinct trunc(check_time,'dd'))>$DAYS
+       and max(check_time)>sysdate-$DAYS and avg(pct_total)>1
+order by  8 desc, 9, 10 desc;
+commit;
+!
+fi
+
+$db_conn_cmd <<! >$tmpfile
+set lines 200 pages 200 
+col module format a30
+col sql_type format a10
+col sql format a18
+select
+       sql_type,sql, module, count(distinct trunc(check_time,'dd')) days, 
+       sum(executions) sum_exec,
+       round(avg(executions)) avg_exec, round(avg(buffer_gets)) avg_buffer_gets
+     -- , round(avg(gets_per_exec)) avg_buffer_gets_per_exec
+     -- , count(distinct host_name) distr, round(avg(pct_total),1) avg_pct
+     -- , min(check_time) start_time, max(check_time) end_time
+from tmp_buffer_gets 
+where executions<100 and gets_per_exec>1000000
+group by sql_type, sql, module
+having count(distinct trunc(check_time,'dd'))>$DAYS
+       and max(check_time)>sysdate-$DAYS and avg(pct_total)>1
+order by  4 desc, 5, 6 desc;
+!
+
+lines=`cat $tmpfile|wc -l|awk '{print $1}'`
+i=1
+while [ $i -le $lines ];do
+  line=`head -$i $tmpfile|tail -1`
+  i=`expr $i + 1`
+  identifier=`echo "$line"|awk '{if(NF>0 && substr($1,1,1)!="-" && $2!="rows" && $1!="SQL_TYPE") printf "a"; else printf "b"}'`
+  if [ "$identifier" == "a" ];then
+    head -3 $tmpfile|tail -2
+    sql_type=`echo "$line"|awk '{print $1}'`
+    sql=`echo "$line"|awk '{print $2}'`
+
+    echo "$line"
+    echo "Hosts:"|awk '{printf "    "$1" "}'
+    $db_conn_cmd <<!  |awk '{if(NF>0)printf $1" "}END{print ""}' 2>/dev/null
+      set feedback off heading off
+      select distinct host_name from snap_ora_sp_sql_buffer_gets 
+      where ${sql_type}='$sql' and check_time>sysdate-$DAYS and host_name like '%$HOST_IDENTIFIER%';
+!
+
+    echo "Clients:"|awk '{printf "    "$1" "}'
+    $db_conn_cmd <<! |awk '{if(NF>0)printf $1" "}END{print ""}' 2>/dev/null
+      set feedback off heading off
+      select /*+parallel*/ distinct '['||host_name||']'||osuser||'@'||machine||':'||program from tmp_session
+      where ${sql_type}='$sql' and host_name in (
+      select distinct host_name from snap_ora_sp_sql_buffer_gets
+      where ${sql_type}='$sql' and check_time>sysdate-$DAYS and host_name like '%$HOST_IDENTIFIER%')
+      order by 1;
+!
+
+    echo "SQL Text:"|awk '{printf "    "$0"  "}'
+    $db_conn_cmd<<! |awk '{if(NF>0)printf $0}END{print ""}' 2>/dev/null
+      set feedback off heading off 
+      select sql_text from (
+      select distinct piece, sql_text from snap_ora_sqltext 
+      where host_name like '%$HOST_IDENTIFIER%' and $sql_type = '$sql' order by piece
+      );
+!
+    echo ""
+  fi
+done
+tail -2 $tmpfile|head -1
+rm -f $tmpfile

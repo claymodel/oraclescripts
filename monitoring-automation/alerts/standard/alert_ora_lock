@@ -1,0 +1,25 @@
+select y.host_name||'['||(select min(substr(value,7)) from configurations c
+                          where conf_name='IP Address' and value like '10.19.%' and host_name=y.host_name
+                          and check_time=(select max(check_time) from configurations where host_name=c.host_name
+                          and conf_name=c.conf_name))
+                 ||']' hn,
+        ' @'
+        ||to_char((y.check_time-(select difference/86400 from check_datetime where host_name = y.host_name)),'hh24:mi')
+        ||', '
+        ||'sid: '||y.sid||', ['||y.osuser||'@'||y.machine||'], blocking '||y.blocking||' sessions, '
+				||'lock type: '||y.lock_type||', hold: '||y.hold||', request: '||y.request
+        ||decode(y.hv1, '0' , null, ' || '||'HOLDER SQL: '||nvl((select sql_text from snap_ora_sqltext where hash_value=y.hv1 and piece=0 and host_name=y.host_name),'unknown'))
+        ||decode(y.hv2, '0',null, ' || '||'WAITER SQL: '||nvl((select sql_text from snap_ora_sqltext where hash_value=y.hv2 and piece=0 and host_name=y.host_name),'unknown'))
+        msg
+from (
+select distinct t.host_name, t.check_time, t.sid, t.osuser, t.machine, t.blocking,t.hash_value hv1,x.hash_value hv2,
+       replace(t.lock_type,'_',' ') lock_type, replace(t.hold,'_',' ') hold, replace(x.request,'_',' ') request
+from snap_ora_lock t, snap_ora_lock x
+where t.host_name=x.host_name and t.check_time=x.check_time and t.blocking>10
+and x.session_type='wait' and t.session_type='hold' and x.waiting_for=t.sid
+and t.check_time=(select max(check_time) from snap_ora_lock where host_name=t.host_name)
+and t.sid not in (select sid from snap_ora_lock where host_name=t.host_name and check_time=t.check_time and session_type='wait')
+-- and t.check_time=(select max(check_time) from snap_ora_lock where host_name=t.host_name)
+and  t.check_time-(select difference from check_datetime where host_name=t.host_name)/3600/24 > sysdate-5/24/60
+and t.host_name not in ('yuliu8','yuliu9','ls1')
+) y

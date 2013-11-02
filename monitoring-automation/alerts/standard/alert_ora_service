@@ -1,0 +1,8 @@
+select distinct hn, 'Instance down '||lag||' mins' msg
+from (select host_name||'['||(select min(substr(value,7)) from configurations c
+                          where conf_name='IP Address' and value like '10.19.%' and host_name=t.host_name
+                          and check_time=(select max(check_time) from configurations where host_name=c.host_name
+                          and conf_name=c.conf_name))
+                 ||']' hn,
+        round((sysdate-(select max(check_time) from perf_ora_basic where host_name=t.host_name)+(select difference from check_datetime where host_name=t.host_name)/3600/24)*24*60) lag 
+from perf_ora_basic t where host_name not in ('skt2b','yuliu8','yuliu9')) where lag>=4 

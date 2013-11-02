@@ -1,0 +1,34 @@
+if [[ $# -lt 1 ]];then echo please specify sub table identification ; exit 2; fi
+
+PARAM=$1
+TABLE_NAME=""
+SUFFIX=".dat.sm_$PARAM"
+
+DIR_HOME=$(cd "$(dirname "$0")/../.."; pwd)
+DIR_SCRIPT_BIN=$DIR_HOME/scripts/kbs
+DIR_BASE=$DIR_HOME/tmp/kbs  # Added in V4.0.1
+DIR_TMP=$DIR_HOME/tmp/kbs/tmp
+DIR_LOG=$DIR_HOME/tmp/kbs/log
+DIR_DATA=$DIR_HOME/tmp/kbs/data
+
+if [[ ! -d $DIR_DATA || ! -d $DIR_TMP ]];then echo Cannot find kbs data or tmp directory ; exit 2; fi
+
+timestamp=`date +"%Y%m%d%H%M%S"`
+tmpfile=${DIR_TMP}/process_kbs_data.${timestamp}.${PARAM}.tmp
+rm -f $tmpfile
+
+for file in `ls $DIR_DATA/*${SUFFIX}` ; do
+    cat $file|awk '{for(i=3;i<NF;i++)printf $i" "; print $NF}' >> $tmpfile
+    rm -f $file
+done
+
+if [[ -f $tmpfile && `wc -l $tmpfile|awk '{print $1}'` -gt 0 ]];then cat $tmpfile ; fi
+rm -f $tmpfile
+
+for dir in $DIR_TMP $DIR_LOG $DIR_DATA ; do
+    if [[ -d $dir ]];then
+       if [[ `echo $dir|awk '{print substr($1,2,8)}'` == "smartmon" ]];then
+          find $dir -mtime +30 -exec rm -f {} \;
+       fi
+    fi
+done

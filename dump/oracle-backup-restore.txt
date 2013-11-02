@@ -1,0 +1,37 @@
+CREATE USER taro
+  identified by taro
+  default tablespace users
+  temporary tablespace temp
+  quota 50M on users
+  profile default
+;
+
+grant create session, dba to taro;
+
+grant connect to taro;
+
+connect taro/taro;
+
+@?/demo/schema/human_resources/hr_main.sql
+
+users
+
+temp
+
+$ORACLE_HOME/demo/schema/log/
+
+SELECT table_name FROM user_tables;
+
+DROP USER taro CASCADE;
+
+
+expdp HR/hasnat schemas=HR dumpfile=hr02112013.dmp
+
+expdp taro schemas=HR dumpfile=hr02112013.dmp
+
+DROP USER taro CASCADE;
+
+impdb taro/taro schemas=HR dumpfile=hr02112013.dmp
+
+C:\ORACLEXE\APP\ORACLE\ADMIN\XE\DPDUMP\HR02112013.DMP
+

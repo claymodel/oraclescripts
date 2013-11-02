@@ -1,0 +1,61 @@
+#!/bin/sh
+if [[ -f ~/.profile ]];then 
+	. ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+	. ~/.bash_profile
+fi
+
+if [[ "$ORACLE_SID" == "" || "$ORACLE_HOME" == "" ]];then
+	echo Oracle_Envierment_Not_Specified
+	exit 1
+fi
+
+tmpStr=`date +"%Y%m%d%H%M"`
+echo $tmpStr > tmp/sync_blocker_killer.tmp
+tmpStr=`date +"%Y%m%d%H%M%S"`
+echo $tmpStr >> tmp/sync_blocker_killer.tmp
+
+sqlplus -s "/as sysdba" <<!|awk '{if(NF==12){for(i=1;i<NF;i++)printf $i " "; print $NF;}}'
+	set heading off
+	set pages 3000
+	set lines 1000
+	set feedback off
+	set serveroutput off
+
+	(select  distinct 
+                'wait' tp,
+                 w.waiting_session si,
+                 nvl(replace (w.lock_type,' ', '_'),'unknown') ltype,
+                 nvl(replace (w.mode_held,' ','_'), 'unknown') hold,
+                 nvl(replace (w.mode_requested,' ','_'), 'unknown') req,
+		 w.HOLDING_SESSION waiting_for,
+		 (select count(distinct waiting_session) from dba_waiters where holding_session=w.waiting_session) blocking,
+		 nvl(s.sql_hash_value,'-1') hash_value, nvl(s.username,'unknown') dbuser, 
+		 replace(nvl(s.machine,'unknown'),' ','_') machine, 
+		 replace(nvl(s.osuser,'unknown'),' ','_') osuser, 
+		 replace(nvl(s.program,'unknown'),' ','_') program
+        from  dba_waiters w , v\$session s
+        where  w.waiting_session = s.sid(+)
+        ) 
+        union 
+        (select  distinct
+                'hold' tp,
+                 w.holding_session si,
+                 nvl(replace (w.lock_type,' ', '_'),'unknown') ltype,
+                 nvl(replace (w.mode_held,' ','_'), 'unknown') hold,
+                 nvl(replace (w.mode_requested,' ','_'), 'unknown') req,
+		 -1,
+		 (select count(distinct waiting_session) from dba_waiters where holding_session=w.holding_session) blocking,
+		 nvl(s.sql_hash_value,'-1') hash_value, nvl(s.username,'unknown') dbuser, 
+		 replace(nvl(s.machine,'unknown'),' ','_') machine, 
+		 replace(nvl(s.osuser,'unknown'),' ','_') osuser, 
+		 replace(nvl(s.program,'unknown'),' ','_') program
+        from  dba_waiters w , v\$session s
+        where w.holding_session = s.sid(+)
+	) 
+        ;
+!
+
+
+tmpStr=`date +"%Y%m%d%H%M%S"`
+echo $tmpStr >> tmp/sync_blocker_killer.tmp

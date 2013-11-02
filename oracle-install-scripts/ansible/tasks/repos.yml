@@ -1,0 +1,5 @@
+---
+# include for installing yum packages
+- name: Install EPEL yum Repo
+  action: command rpm -Uvh http://download.fedoraproject.org/pub/epel/6/i386/epel-release-6-7.noarch.rpm creates=/etc/yum.repos.d/epel.repo
+

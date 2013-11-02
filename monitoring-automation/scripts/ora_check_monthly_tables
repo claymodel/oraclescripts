@@ -1,0 +1,148 @@
+if [ -f ~/.profile ];then
+   . ~/.profile
+elif [ -f ~/.bash_profile ];then
+   . ~/.bash_profile
+fi
+
+if [ `ps -ef|grep ora_|wc -l|awk '{print $1}'` -lt 4 ];then
+        exit;
+fi
+
+tmpfile=check_monthful_parts.`date +"%s"`.tmp
+rm -f $tmpfile $tmpfile.1 $tmpfile.2 $tmpfile.3
+
+host_name=`hostname`
+this_year=`date +"%Y"`
+this_month=`date +"%m"`
+
+new_year=$this_year
+new_month=`expr $this_month + 1`
+
+if [ "$new_month" -gt 12 ];then
+        new_month="01"
+        new_year=`expr $this_year + 1`
+fi
+
+if [ "$this_month" -lt 10 -a `echo "$this_month"|awk '{print length($0)}'` -eq 1 ];then
+        this_month="0"$this_month
+fi
+
+if [ "$new_month" -lt 10 -a `echo "$new_month"|awk '{print length($0)}'` -eq 1 ];then
+        new_month="0"$new_month
+fi
+#######################################################
+sqlplus -s "/as sysdba" <<! >$tmpfile.1
+        set serveroutput off
+        set feedback off
+        set lines 125
+        set pages 9999
+        set heading off
+        col type format a10
+        col table_owner format a30
+        col table_name format a30
+
+
+        (select 'mon-part' type, table_owner, table_name
+                from dba_tab_partitions 
+                where partition_name like '%$this_year$this_month%'
+                and table_name not like '%$this_year$this_month%'
+        minus
+        select 'mon-part', table_owner, table_name 
+                from dba_tab_partitions where partition_name like '%$new_year$new_month%'
+        ) minus
+        ( select 'mon-part' type, table_owner, table_name
+                from dba_tab_partitions
+                where (partition_name like '%$this_year$this_month%01%'
+                   or   partition_name like '%$this_year$this_month%10%'
+                   or   partition_name like '%$this_year$this_month%20%'
+                   or   partition_name like '%$this_year$this_month%16%'
+                   or   partition_name like '%$this_year$this_month%24%')
+                and table_name not like '%$this_year$this_month%'
+        minus
+        select 'mon-part', table_owner, table_name
+                from dba_tab_partitions
+                where (partition_name like '%$new_year$new_month%01%'
+                   or   partition_name like '%$new_year$new_month%10%'
+                   or   partition_name like '%$new_year$new_month%20%'
+                   or   partition_name like '%$new_year$new_month%16%'
+                   or   partition_name like '%$new_year$new_month%24%')
+        );
+
+
+        select 'day-part' type, table_owner, table_name
+                from dba_tab_partitions
+                where (partition_name like '%$this_year$this_month%01%' 
+                   or   partition_name like '%$this_year$this_month%10%'
+                   or   partition_name like '%$this_year$this_month%20%'
+                   or   partition_name like '%$this_year$this_month%16%'
+                   or   partition_name like '%$this_year$this_month%24%')
+                and table_name not like '%$this_year$this_month%'
+        minus
+        select 'day-part', table_owner, table_name
+                from dba_tab_partitions
+                where (partition_name like '%$new_year$new_month%01%' 
+                   or   partition_name like '%$new_year$new_month%10%'
+                   or   partition_name like '%$new_year$new_month%20%'
+                   or   partition_name like '%$new_year$new_month%16%'
+                   or   partition_name like '%$new_year$new_month%24%');
+        
+        exit;
+!
+
+if [ -f $tmpfile.1 ];then
+        awk '{if(NF>0){print $0}}' $tmpfile.1 > $tmpfile
+fi
+
+#######################################################
+sqlplus -s "/as sysdba" <<! >$tmpfile.2
+        set serveroutput off
+        set feedback off
+        set lines 125
+        set pages 9999
+        set heading off
+        col type format a10
+        col table_owner format a30
+        col table_name format a30
+
+        select 'mon-tab' type, owner, table_name
+                from dba_tables where table_name like '%$this_year$this_month%';
+
+        exit;
+!
+
+if [ -f $tmpfile.2 ];then
+        cat $tmpfile.2|awk '{if(NF>0){print $0}}' > $tmpfile.3 && mv $tmpfile.3 $tmpfile.2
+        lncnt=`wc -l $tmpfile.2|awk '{print $1}'`
+        i=0
+        while [ $i -lt $lncnt ];do
+                i=`expr $i + 1`
+                line=`head -$i $tmpfile.2|tail -1`
+                table_owner=`echo "$line"|awk '{print $2}'`
+                table_name=`echo "$line"|awk '{print $3}'`
+                
+                new_table_name=`echo "$table_name"|sed "s/$this_year$this_month/$new_year$new_month/g"`
+                
+                new_table_exist=`echo "select count(1), 'xXxXx' from dba_tables where owner='$table_owner' and table_name='$new_table_name';"|sqlplus -s "/as sysdba"|grep "xXxXx"|awk '{print $1}'`
+
+                if [ "$new_table_exist" == "0" ];then
+                        echo "mon-tab $table_owner $new_table_name">>$tmpfile.3
+                fi
+        done            
+
+fi
+
+if [ -f $tmpfile.3 ];then
+        awk '{if(NF>0){print $0}}' $tmpfile.3 >>$tmpfile
+fi
+
+#######################################################
+
+
+
+if [ -f $tmpfile ];then
+        if [ `wc -l $tmpfile|awk '{print $1}'` -gt 0 ];then
+                cat $tmpfile|awk '{if(NF>0){print $2" "$3" "$1}}'
+        fi
+fi
+
+rm -f $tmpfile $tmpfile.1 $tmpfile.2 $tmpfile.3

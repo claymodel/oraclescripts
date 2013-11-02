@@ -1,0 +1,3 @@
+crontab -l|awk '{for (i=6;i<NF;i++)printf $i" ";print $NF}'|
+	sed 's/^nohup sh //; s/^nohup //; s/^sh //; s/^ksh //; s/ .*$//; s/|.*$//; s/>.*$//; '|
+	awk '{if(NF>0)print $NF,$0,$0}' FS='/'|sort -u

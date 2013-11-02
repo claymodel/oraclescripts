@@ -1,0 +1,12 @@
+select a.host_name||'['||(select min(substr(value,7)) from configurations c
+                          where conf_name='IP Address' and value like '10.19.%' and host_name=a.host_name
+                          and check_time=(select max(check_time) from configurations where host_name=c.host_name 
+                          and conf_name=c.conf_name))
+                 ||']' hn,
+      a.param1-b.param1||' times 4031' msg
+ from perf_ora_basic a, perf_ora_basic b
+ where a.host_name=b.host_name 
+ and to_date(to_char(a.check_time,'yyyymmddhh24mi'),'yyyymmddhh24mi')=
+     to_date(to_char(b.check_time,'yyyymmddhh24mi'),'yyyymmddhh24mi')+1/24/60
+ and a.check_time=(select max(check_time) from perf_ora_basic where host_name=a.host_name)
+ and a.param1>b.param1

@@ -1,0 +1,67 @@
+#Parameter format:
+# Reversed table_name, "Host_name, Check_time, Reversed string, Reversed string", Reversed Path
+
+if [[ $# -lt 3 ]];then
+	exit 1
+fi
+
+db_config_file=db_conn.cfg
+echo $*
+file=$3
+file=`echo $file|awk '{for(i=length($1);i>0;i--)printf substr($1,i,1)}'`
+if [[ -f $file ]];then
+   table_name=`echo $1|awk '{for(i=length($1);i>0;i--)printf substr($1,i,1)}'`
+   other_items=$2
+
+   host_name=`echo $other_items|awk '{print $1}'`
+   check_time=`echo $other_items|awk '{print $2}'`
+   filename=`echo $other_items|awk '{print $3}'|awk '{for(i=length($1);i>0;i--)printf substr($1,i,1)}'`
+   path=`echo $other_items|awk '{print $4}'|awk '{for(i=length($1);i>0;i--)printf substr($1,i,1)}'`
+
+   other_items="$host_name $check_time $filename $path"  
+ 
+   other_items=`echo "$other_items"|sed "s/'/''/g; s/&/'||chr(38)||'/g; s/%/'||chr(37)||'/g; s/\!/'||chr(33)||'/g; s/\\\\\$/'||chr(36)||'/g"|awk '{for(i=1;i<=NF;i++)printf "\047"$i"\047,"}'`
+   
+   tmpfile=tmp/insert_file.$$.`date +"%H%M"`.$RANDOM.tmp
+   sqlscript=${tmpfile}.sql
+   rm -f $tmpfile $sqlscript
+   
+   line_cnt=0
+   line_limit=`cat $file|wc -l|awk '{print $1}'`
+   cat $file| 
+     sed "s/'/''/g; s/&/'||chr(38)||'/g; s/%/'||chr(37)||'/g"|
+     sed "s/\#/'||chr(35)||'/g; s/\!/'||chr(33)||'/g; s/;/'||chr(59)||'/g"|
+     sed "s/\\\\\$/'||chr(36)||'/g; s/\`/'||chr(96)||'/g"|
+	while read line; do
+   		line_cnt=`expr $line_cnt + 1`
+   		if [[ $line_cnt != $line_limit ]];then
+			content="$line\r\n"
+		else	 
+			content="$line"
+		fi
+   		if [[ $line_cnt == 1 ]];then
+   			echo "insert into $table_name values ($other_items '$content');">>$sqlscript
+   		else
+   			host_name=`echo $other_items|awk '{print $1}' FS=','`
+   			check_time=`echo $other_items|awk '{print $2}' FS=','`
+   			filename=`echo $other_items|awk '{print $3}' FS=','`
+   			path=`echo $other_items|awk '{print $4}' FS=','`
+   			echo "update $table_name set content=content||'$content' where host_name=$host_name and check_time=$check_time and filename=$filename and path=$path ;">>$sqlscript 
+   		fi
+   	done
+   
+   for db_type in `cat $db_config_file|awk '{print $1}'`; do
+   
+   	db_cmd=`cat $db_config_file|sed 's/ -s / /'|awk '{if($1=="'$db_type'")for(i=2;i<=NF;i++)printf $i" "}'|sed 's/sqlplus /\.\/smartmon_sqlplus /g'`
+   	$db_cmd <<!
+		spool insert_file.sql.log
+		set echo on
+   		alter session set nls_date_format='yymmddhh24miss';
+   		@$sqlscript
+	 	commit;
+		spool off
+!
+   done   
+fi
+
+rm -f $tmpfile $sqlscript

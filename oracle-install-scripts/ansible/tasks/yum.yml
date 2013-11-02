@@ -1,0 +1,41 @@
+---
+# include for installing yum packages
+- name: Install EPEL yum Repo
+  action: command rpm -Uvh http://download.fedoraproject.org/pub/epel/6/i386/epel-release-6-7.noarch.rpm creates=/etc/yum.repos.d/epel.repo
+
+# Install packages needed for RDBMS, FMW, VirtualBox 
+- name: install yum package list
+  action: yum pkg=$item
+  with_items:
+    - kernel
+    - kernel-devel
+    - kernel-headers
+    - kernel-uek
+    - kernel-uek-devel
+    - kernel-uek-headers
+    - glibc
+    - unixODBC
+    - unixODBC-devel
+    - gcc
+    - libaio
+    - libaio-devel
+    - libstdc++-devel
+    - elfutils-libelf-devel
+    - compat-libstdc++-33
+    - oracle-rdbms-server-11gR2-preinstall
+    - tigervnc-server
+# These last three needed by the FMW OIF installer. These are the 32bit libs
+    - glibc-devel.i686
+    - libgcc.i686
+    - libstdc++-devel.i686
+# From EPEL repo
+    - python-argparse
+    - git
+# For BTRFS support
+    - btrfs-progs
+
+- name: Remove unwanted packages
+  action: yum pkg=$item state=removed
+  with_items:
+    - java-1.6.0-openjdk
+    - java-1.5.0-gcj

@@ -1,0 +1,36 @@
+if [[ `date +"%M"` == '10' ]];then
+	if [[ -f ~/.profile ]];then
+		. ~/.profile
+	elif [[ -f ~/.bash_profile ]];then
+		. ~/.bash_profile
+	fi
+
+	now_date=`date +"%Y%m%d"`
+	#now_date=$1
+	#now_clock=$2
+	now_clock=`date +"%H"`
+
+	target_date=$now_date	
+	target_clock=`expr $now_clock - 1`
+	if [[ "$target_clock" -lt 0 ]];then
+		target_date=`sh calc_date_ndays $now_date -1`
+		target_clock="23"
+	fi
+	if [[ "$target_clock" -lt 10 ]];then
+		target_clock="0$target_clock"
+	fi
+
+	sqlplus -s "/as sysdba" <<!|awk '{if(NF>0)print $1}'
+
+		set feedback off
+		set heading off
+select (select count(distinct to_char(accepttime,'yyyymmddhh24miss')||' '||serialno) from icdwf.t_pbh_problemprocess
+	where accepttime between to_Date('${target_date}${target_clock}0000','yyyymmddhh24miss')
+			 and to_Date('${target_date}${target_clock}5959','yyyymmddhh24miss')) +
+       (select count(distinct to_char(accepttime,'yyyymmddhh24miss')||' '||serialno) from icdwf.t_pbh_problemprocesshis
+        where accepttime between to_Date('${target_date}${target_clock}0000','yyyymmddhh24miss')
+                         and to_Date('${target_date}${target_clock}5959','yyyymmddhh24miss')) from dual;
+		exit;
+!
+fi
+

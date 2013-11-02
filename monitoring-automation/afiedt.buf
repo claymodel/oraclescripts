@@ -1,0 +1,3 @@
+alter session enable row movement;
+alter table smartmon_report.snap_ora_session shrink space
+/

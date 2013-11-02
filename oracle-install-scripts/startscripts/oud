@@ -1,0 +1,188 @@
+#!/bin/bash
+#
+# Copyright (c) 2012, Oracle and/or its affiliates. All rights reserved.
+# 
+
+# chkconfig: 345 90 30
+# description: Oracle Unified Directory startup script
+
+# Author: Chris Johnson (christopher.johnson@oracle.com)
+
+# Please Note that this was written for my own purposes. It may or may
+# not work in your environment.
+
+# When you install this scroll down and edit the environment variables
+# below to match up with your environment.
+
+
+# Set the path to the Oracle Unified Directory instance to manage
+INSTALL_ROOT="/home/oracle/Oracle/Middleware/asinst_1/OUD"
+export INSTALL_ROOT
+
+# who does OUD run as?
+OUDOWNER=oracle
+
+DIRLISTENPORT=1389
+DIRBASE="dc=oracleateam,dc=com"
+DIRADMINDN="cn=Directory Manager"
+DIRADMINPASSWORD="ABcd1234"
+
+# you shouldn't have to change this unless you don't have OUD listening on localhost
+DIRLISTENHOST=localhost
+
+
+# GENERALLY NO NEED TO EDIT PAST HERE
+
+# set the path to include the ldap command line tools
+PATH=$PATH:$INSTALL_ROOT/bin
+
+search()
+{
+    echo "Searching LDAP directory with command line options:"
+
+    if [ "$2" != "" ]; then
+	SEARCHBASE=$1
+	SEARCHSTRING=$2
+    else
+	SEARCHBASE=$DIRBASE
+	SEARCHSTRING=$1
+    fi
+
+    echo "Searching directory."
+    echo "  base: $SEARCHBASE"
+    echo "string: $SEARCHSTRING"
+    ldapsearch -h $DIRLISTENHOST -p $DIRLISTENPORT -D "$DIRADMINDN" -w "$DIRADMINPASSWORD" -b $SEARCHBASE $SEARCHSTRING
+}
+
+modify()
+{
+    echo "Executing LDAP modify"
+    ldapmodify -h $DIRLISTENHOST -p $DIRLISTENPORT -D "$DIRADMINDN" -w "$DIRADMINPASSWORD" -a -c
+}
+
+ldapping()
+{
+    echo "Searching LDAP directory"
+    ldapsearch -h $DIRLISTENHOST -p $DIRLISTENPORT -D "$DIRADMINDN" -w "$DIRADMINPASSWORD" -b $DIRBASE $DIRADMINDN dn
+    ret=$?
+    
+    if [ "$ret" -ne "0" ]; then
+	echo Ping failed.
+    else
+	echo Ping succeeded.
+    fi
+    return $ret
+}
+
+if [ "" == "$USER" ]; then
+    USER=`whoami`
+fi
+
+if [ "$USER" == "root" ] ; then
+    # if we're running as root we will need to su to stop or start the server
+    SUCOMMAND="/bin/su - $OUDOWNER -- "
+else
+    # otherwise we don't need a su command
+    SUCOMMAND=""
+fi
+
+install() {
+  if [ "$USER" == "root" ] ; then
+      echo Copying $0 to /etc/init.d
+      cp $0 /etc/init.d
+      register
+  else
+      echo run \"$0 install\" as root to install the rc script in /etc/init.d
+      echo and set OUD to start at system boot
+  fi
+}
+
+register() {
+  if [ "$USER" == "root" ] ; then
+      echo Running chkconfig
+      chkconfig --add oud
+      chkconfig --list oud
+  else
+      echo only root can register OUD to run as a service
+  fi
+}
+
+unregister() {
+  if [ "$USER" == "root" ] ; then
+      echo Running chkconfig
+      chkconfig --del oud
+  else
+      echo only root can unregister OUD to run as a service
+  fi
+}
+
+# Determine what action should be performed on the server
+
+# TODO: add checks to make sure you're start/stop/restarting as either root or $OUDOWNER
+
+case "${1}" in
+start)
+  #echo SUCOMMAND is $SUCOMMAND
+  echo Starting OUD
+  $SUCOMMAND "${INSTALL_ROOT}/bin/start-ds" --quiet
+  exit ${?}
+  ;;
+stop)
+  echo Stopping OUD
+  $SUCOMMAND "${INSTALL_ROOT}/bin/stop-ds" --quiet
+  exit ${?}
+  ;;
+restart)
+  echo Restarting OUD
+  $SUCOMMAND "${INSTALL_ROOT}/bin/stop-ds" --restart --quiet
+  exit ${?}
+  ;;
+
+# other stuff I added:
+# service related options (for use by root)
+install)
+  install
+  ;;
+register)
+  register
+  ;;
+unregister)
+  unregister
+  ;;
+
+# options for users other than root
+shell)
+  echo Starting shell...
+  bash -
+  ;;
+dsconfig)
+  echo Starting dsconfig
+  dsconfig
+  ;;
+search)
+  echo LDAP Search selected from command line
+  search $2 $3
+  ;;
+modify)
+  echo LDAP Modify selected from command line
+  modify
+  ;;
+ping)
+  ldapping
+  ;;
+
+
+*)
+  #echo "Usage:  $0 { start | stop | restart | install }"
+
+  echo "Usage (as root):"
+  echo "  $0 {start|stop|restart|install|register}"
+  echo "Usage (as $OUDOWNER):"
+  echo "  $0 {start|stop|restart|dsconfig}"
+  echo "Usage (as anyone):"
+  echo "  $0 {shell|status|ping|modify}"
+  echo "  $0 search <search string>"
+  echo "  $0 search <search base> <search string>"
+  exit 1
+  ;;
+esac

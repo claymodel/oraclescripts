@@ -1,0 +1,12 @@
+select distinct host_name||'['||(select min(substr(value,7)) from configurations c
+                          where conf_name='IP Address' and value like '10.19.%' and host_name=t.host_name
+                          and check_time=(select max(check_time) from configurations where host_name=c.host_name
+			  and conf_name=c.conf_name))
+                 ||']' hn,
+	'fs '||mount_point||', '||capacity||'% used, '|| 
+	 decode(trunc(available_m/1024),
+	        0,'0'||round(available_m/1024,1),
+		round(available_m/1024,1))||'g left' msg
+from snap_host_df t where t.check_time=(select max(check_time) from snap_host_df where host_name=t.host_name)
+and capacity>95 and available_m<100 and mount_point !='/tmp'
+and check_time-(select difference from check_datetime where host_name=t.host_name)/3600/24 > sysdate-5/24/60

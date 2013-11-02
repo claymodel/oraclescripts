@@ -1,0 +1,84 @@
+#!/bin/sh
+
+if [[ -f ~/.profile ]];then
+	. ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+	. ~/.bash_profile
+fi
+
+if [[ "$ORACLE_SID" == "" || "$ORACLE_HOME" == "" ]];then
+	echo "oracle_envirments_not_specified"
+	exit 2
+fi
+if [[ `which sqlplus 2>&1|grep "no sqlplus in"|wc -l|awk '{print $1}'` -gt 0 ]];then
+	echo "can't_find_sqlplus"
+	exit 2
+fi
+if [[ `which lsnrctl 2>&1|grep "no lsnrctl in"|wc -l|awk '{print $1}'` -gt 0 ]];then
+	echo "can't_find_lsnrctl"
+	exit 2
+fi
+
+smonCnt=`ps auxw|grep ora_smon_$ORACLE_SID|grep -v grep|wc -l|awk '{print $1}'`
+
+OraService="-1"
+OpenMode="-1"
+
+if [[ "$smonCnt" -gt 0 ]];then
+	tbname="v\$instance"
+	InstanceStatus=`echo "select status||':xXxXx' from $tbname ;"|sqlplus -s "/as sysdba"|grep "xXxXx"|tail -1|awk '{print $1}' FS=":"`
+	tbname="v\$database"
+	DatabaseOpenMode=`echo "select replace(open_mode,' ','_') ||':xXxXx' from $tbname ;"|sqlplus -s "/as sysdba"|grep "xXxXx"|tail -1|awk '{print $1}' FS=":"`
+
+	if [[ "$InstanceStatus" == "OPEN" ]];then
+		OraService="1"
+	else
+		OraService="0"
+	fi
+	if [[ "$DatabaseOpenMode" == "READ_WRITE" ]];then
+		OpenMode="1"
+	elif [[ "$DatabaseOpenMode" == "READ_ONLY" ]];then
+		OpenMode="2"
+	else
+		OpenMode="0"
+	fi
+fi
+
+ListenerStatus="0"
+
+if [[ `lsnrctl status|grep -i $ORACLE_SID|grep "status READY"|wc -l|awk '{print $1}'` -gt 0 ]];then
+	ListenerStatus="1"
+elif [[ `lsnrctl status|grep -i $ORACLE_SID|grep "status UNKNOWN"|wc -l|awk '{print $1}'` -gt 0 ]];then
+        ListenerStatus="1"
+fi
+
+if [[ "$ListenerStatus" == "0" ]];then
+	ListenerStatus=`ps -ef|grep tnslsnr|grep -v grep|wc -l|awk '{print $1}'`
+fi
+	
+ActiveSession="0"
+UserSession="0"
+LatchFreeSession="0"
+ScatteredReadSession="0"
+UnavailableIndexes="0"
+UnusableIndParts="0"
+
+if [[ "$OraService" -gt 0 ]];then 
+	tbname="v\$session"
+	tbname2="v\$session_wait"
+	tbname3="x\$kghlu"
+	#tmpPair=`echo "select (select count(1) from $tbname where type='USER' and status='ACTIVE') ||':'|| (select count(1) from $tbname where type='USER') ||':'||(select count(distinct sid) from $tbname2 where event ='latch free')||':'||(select count(distinct sid) from $tbname2 where event ='db file scattered read')||':'||(select count(1) from dba_indexes where status not in ('VALID','N/A') and owner not like 'HWWH%'  and owner not like 'DEV%')||':'||(select count(1) from dba_ind_partitions where status not in ('USABLE','N/A') and index_owner not like 'HWWH%' and index_owner not like 'DEV%' and index_name !=('PK_CS_IMEI_REWARD_MID'))||':'||(select sum(kghlunfu) from $tbname3)||':xXxXx' from dual;"|sqlplus -s "/as sysdba"|grep "xXxXx"|tail -1|awk '{print $1" " $2" "$3" "$4" "$5" "$6" "$7}' FS=":"`
+	
+	ActiveSession=`echo "$tmpPair"|awk '{print $1}'`
+	UserSession=`echo  "$tmpPair"|awk '{print $2}'`
+	LatchFreeSession=`echo "$tmpPair"|awk '{print $3}'`
+	ScatteredReadSession=`echo "$tmpPair"|awk '{print $4}'`
+	UnavailableIndexes=`echo "$tmpPair"|awk '{print $5}'`
+	UnusableIndParts=`echo "$tmpPair"|awk '{print $6}'`
+	sum_kghlunfu=`echo "$tmpPair"|awk '{print $7}'`
+fi
+
+#echo "$OraService $OpenMode $ListenerStatus $ActiveSession $UserSession $LatchFreeSession $ScatteredReadSession $UnavailableIndexes $UnusableIndParts $sum_kghlunfu"
+echo "$OraService $OpenMode $ListenerStatus 0 0 0 0 0 0 0"
+
+exit 0

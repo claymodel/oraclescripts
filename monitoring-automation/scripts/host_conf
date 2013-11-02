@@ -1,0 +1,88 @@
+#! /bin/sh
+
+OS=$1
+
+return_line (){
+    
+   echo "$os $release $hardware_platform $machine_hardware_name $processor_type $processor_model $processor_frequency $available_processor $defined_processor $logical_cpu $memory_size $swap_size $drive_cnt"|
+   	awk '{print "OS_Name:"substr($1,1,10), "OS_Release:"substr($2,1,150), "Hardware_Platform:"substr($3,1,20), "Machine_Hardware_Name:"substr($4,1,20), "Processor_Type:"substr($5,1,10), "Processor_Model:"substr($6,1,40), "Processor_Frequency:"$7,"Available_Processor:"$8,"Defined_Processor:"$9,"Logical_Processor:"$10,"Memory_Size_(M):"$11,"Swap_Size_(M):"$12,"Drive_Count:"$13}'
+
+}
+
+aix () {
+   processor_type="`uname -p`_`getsystype -y`"
+   hardware_platform=`uname -M|sed 's/ /_/g'`
+   release="`uname -v`.`uname -r`"
+   processor_model=`lsdev -Cc processor | head -1 | cut -d' ' -f1|xargs lsattr -El|awk '/^type/ {print $2}'`
+
+   machine_hardware_name=`lscfg -vpl sysplanar0 |grep -p "System VPD:" |grep "Machine/Cabinet"`
+   if [ $? -eq 0 ];then
+      machine_hardware_name=${machine_hardware_name##*.}
+   else
+      machine_hardware_name=0
+   fi
+
+   available_processor=`lsdev -Cc processor|grep -i available|wc -l`
+   defined_processor=`lsdev -Cc processor|grep -i defined|wc -l`
+   logical_cpu=`vmstat |grep lcpu|head -1|awk '{print substr($3, 6)}'`
+   memory_size=`vmstat |grep lcpu|head -1|awk '{print substr($4, 5, length($4)-6)}'`
+   swap_size=`lsps -s|tail -1|awk '{print substr($1,1,length($1)-2)}'`
+
+   processor_frequency=0
+   procstr=`lsdev -Sa -Cc processor`
+   procspeed=`lsattr -El ${procstr%% *} -a frequency -F value`
+   if [ ! -z "$procspeed" ];then
+      if [ `expr $procspeed % 1000000` -ge 500000 ];then
+         processor_frequency=`expr $procspeed / 1000000 + 1`
+      else
+         processor_frequency=`expr $procspeed / 1000000`
+      fi
+   fi
+
+   drive_cnt=`iostat -d|grep "drives="|awk '{print substr($4,8)}'`   
+   return_line
+   
+}
+
+suse (){
+   processor_type=`uname -p`
+   hardware_platform=`uname -i|sed 's/ /_/g'`
+   release=`cat /proc/version|sed 's/ /_/g'`
+   processor_model=`cat /proc/cpuinfo|grep "model name"|sort -un|head -1|awk '{print substr($0,index($0,$4))}'|sed 's/ *//g'`
+   machine_hardware_name=`uname -m`
+   available_processor=`cat /proc/cpuinfo|grep -i "physical id"|awk '{print $4}'|sort -u|wc -l`
+   if [[ "$available_processor" == 0 ]];then
+	   available_processor=`cat /proc/cpuinfo|grep -i "processor"|awk '{print $3}'|sort -u|wc -l`
+   fi
+   defined_processor=0
+   logical_cpu=`cat /proc/cpuinfo|grep -i "physical id"|awk '{print $4}'|wc -l`
+   memory_size=`free -m|grep -i mem:|awk '{print $2}'`
+   swap_size=`free -m|grep -i swap:|awk '{print $2}'`
+   processor_frequency=`cat /proc/cpuinfo|grep -i "cpu mhz"|awk '{print $4}'|sort -nr|head -1`
+
+   drive_cnt=`iostat -d|sed '1,3 d'|awk '{if(NF>0 && $1!="scd0")print}'|wc -l|awk '{print $1}'` 
+   return_line
+}
+
+
+os=`uname`  # kernel name
+processor_type="unknown"
+hardware_platform="unknown"
+release="unknown"
+processor_model="unknown"
+machine_hardware_name="unknown"
+available_processor=0
+defined_processor=0
+logical_cpu=0
+memory_size=0
+swap_size=0
+processor_frequency=0
+
+sleep 10
+
+if [ "$OS" == 'suse' ];then
+   suse
+elif [ "$OS" == "aix" ];then
+   aix
+fi
+

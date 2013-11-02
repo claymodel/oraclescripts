@@ -1,0 +1,112 @@
+. ~/.profile 
+
+START_DATE=$1   #yyyymmdd
+DAYS=$2
+
+if [[ "$START_DATE" == "" && "$DAYS" == "" ]];then
+   DAYS=1
+   START_DATE="N/A"
+fi
+cd /smartmon/MICRO_REPORTS/performance_tuning/
+
+timeStr=" and check_time between to_date('$START_DATE','yyyymmdd') and to_date('$START_DATE','yyyymmdd') + $DAYS"
+timeStr_l=" and l.check_time between to_date('$START_DATE','yyyymmdd') and to_date('$START_DATE','yyyymmdd') + $DAYS"
+timeStr_r=" start_date = to_date('$START_DATE','yyyymmdd') and end_date=to_date('$START_DATE','yyyymmdd') + $DAYS"
+
+if [[ "$START_DATE" == "N/A" ]];then
+   nowDate=`date +"%Y%m%d%H%M"`
+   timeStr=" and check_time between to_date('$nowDate','yyyymmddhh24mi')-$DAYS and to_date('$nowDate','yyyymmddhh24mi')"
+   timeStr_l=" and l.check_time between to_date('$nowDate','yyyymmddhh24mi')-$DAYS and to_date('$nowDate','yyyymmddhh24mi')"
+   timeStr_r=" start_date = to_date('$nowDate','yyyymmddhh24mi')-$DAYS and end_date = to_date('$nowDate','yyyymmddhh24mi')"
+fi
+
+db_conn_cmd=`cat /smartmon/db_conn.cfg|awk '{if($1=="report"){for(i=2;i<NF;i++)printf $i" ";print $NF}}'`
+
+$db_conn_cmd <<!
+show user;
+
+--找出所有锁的严重程度
+drop table tmp_session_enqueue;
+create table tmp_session_enqueue as
+select /*parallel(20)*/ host_name, check_time , count( distinct sid) cnt
+from snap_ora_session where event='enqueue' 
+$timeStr
+group by host_name, check_time;
+
+drop table tmp_lock;
+create table tmp_lock as
+select /*parallel(20)*/
+        l.host_name, l.check_time, l.session_type, l.sid, l.lock_type , l.hold , l.request, l.waiting_for, l.blocking
+       ,l.hash_value, l.dbuser, l.machine, l.osuser, l.program
+       , m.pid, m.status, m.serial, m.cmdtype, m.logon_time, m.sql_id
+from snap_ora_lock l , snap_ora_session m
+where l.host_name=m.host_name and l.check_time=m.check_time and l.sid=m.sid and l.machine=m.machine and l.program=m.program
+$timeStr_l
+and l.dbuser=m.dbuser and l.osuser=m.osuser;
+
+drop table tmp_lock_session_basic;
+create table tmp_lock_session_basic as
+select /*parallel(20)*/
+        min(a.lock_time) lock_snap_start ,max (a.lock_time) lock_snap_end
+      , min(a.session_time) session_start_time, max(a.session_time) lock_end_time
+      , round(( max(a.session_time)-min (a.lock_time))*1440+ 1) lock_minutes
+      ,a.host_name, a.sid, a.pid, a.serial, a.session_type, a.lock_type, a.hold, a.request, a.waiting_for
+      ,a.dbuser,a.machine, a.osuser, a.program ,a.logon_time
+      , max(last_call_et) max_last_call_et ,max (a.blocking) max_blocking, a.hash_value, a.sql_id
+      , count(distinct event) event_count, max(a.seconds_in_wait) max_sec_in_wait   
+from (
+select t.check_time lock_time, x.check_time session_time
+      ,t.host_name, t.session_type, t.sid, t.lock_type, t.hold, t.request, t.waiting_for, t.blocking
+      ,t.hash_value, t.dbuser, t.machine, t.osuser, t.program
+      ,x.pid, x.status, x.serial, x.cmdtype, x.logon_time, x.last_call_et, x.sql_id, x.event, x.seconds_in_wait
+      ,x.wait_time, x.wait_state, x.p1, x.p2, x.p3
+from tmp_lock t , snap_ora_session x
+where t.hold='Exclusive' and t.waiting_for=- 1 and t.blocking>1
+and t.host_name=x.host_name and t.sid=x.sid and trunc(t.check_time, 'dd' )=trunc(x.check_time,'dd' )
+and t.serial=x.serial and t.pid=x.pid and t.hash_value=x.hash_value and t.sql_id=x.sql_id
+and x.last_call_et>(x.check_time-t.check_time)*86400 and x.logon_time<t.check_time
+and x.machine=t.machine and x.program=t.program and x.dbuser=t.dbuser and x.osuser = t.osuser
+) a
+group by a.host_name, a.sid, a.pid, a.serial, a.session_type, a.lock_type, a.hold, a.request, a.waiting_for
+      ,a.dbuser, a.machine, a.osuser, a.program, a.logon_time, a.hash_value, a.sql_id
+;
+
+drop table tmp_lock_session;
+create table tmp_lock_session as
+select /*parallel(20)*/
+      l.lock_snap_start, l.lock_snap_end, l.session_start_time, l.lock_end_time, l.lock_minutes
+      ,l.host_name, l.sid, l.pid, l.serial, l.session_type, l.lock_type, l.hold, l.request, l.waiting_for
+      ,l.dbuser, l.machine, l.osuser, l.program, l.logon_time, l.max_last_call_et, l.max_blocking, l.hash_value
+      ,l.sql_id, l.event_count, l.max_sec_in_wait
+      , max(e.cnt) max_enqueue_session, count (distinct trunc(e.check_time,'mi' )) enqueue_minutes
+from  tmp_lock_session_basic l, tmp_session_enqueue e
+where l.host_name=e.host_name(+) and e.check_time(+) between l.lock_snap_start and l.lock_end_time
+      and l.lock_end_time>l.lock_snap_start and l.max_last_call_et> 1
+group by l.lock_snap_start, l.lock_snap_end, l.session_start_time, l.lock_end_time, l.lock_minutes
+      ,l.host_name, l.sid, l.pid, l.serial, l.session_type, l.lock_type, l.hold, l.request, l.waiting_for
+      ,l.dbuser, l.machine, l.osuser, l.program, l.logon_time, l.max_last_call_et, l.max_blocking, l.hash_value
+      ,l.sql_id, l.event_count, l.max_sec_in_wait
+order by 26 desc, 27 desc;
+
+drop table tmp_session_enqueue;
+drop table tmp_lock;
+drop table tmp_lock_session_basic;
+
+--检查锁问题的分布情况和严重性
+insert into qa_lock_distr
+select t.host_name, 
+       to_date('$START_DATE','yyyymmdd'),
+       to_date('$START_DATE','yyyymmdd')+$DAYS,
+       substr(t.machine,1,60), substr(t.program,1,200), 
+       substr(t.lock_type,1,50), count(1) , 
+       count(distinct trunc(t.lock_snap_start,'dd')) ,
+       max(t.max_enqueue_session) ,
+     --max(t.enqueue_minutes) ,
+       max(t.lock_minutes) 
+from tmp_lock_session t where host_name like '%yy%' and t.enqueue_minutes/t.lock_minutes>0.8 and t.lock_snap_start< sysdate-1
+group by t.host_name, t.machine, t.program, t.lock_type
+;
+commit;
+
+select * from qa_lock_distr where $timeStr_r order by days_appear desc, cnt desc;
+!

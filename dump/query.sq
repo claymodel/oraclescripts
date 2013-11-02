@@ -1,0 +1,26 @@
+#!/bin/sh
+
+sqlplus /NOLOG
+set feedback on
+set term on
+set echo on
+set heading off
+set underline off
+set pagesize 10000
+set linesize 999
+set wrap off
+WHENEVER SQLERROR EXIT 20
+connect ${My_DB_USER}/${My_DB_PASSWORD}
+SET ECHO OFF
+SET TERM OFF
+SPOOL ${DB_OUTPUT_FILE}
+select fh.box_name 
+from file_update_history fh,update_file_vw ff
+WHERE
+ff.file_id=fh.file_id 
+and fh.act_record_count IS NULL
+AND FF.STATUS_CD <> 'OLD'
+and to_char(fh.access_date,'YYYYMMDD') between to_char(SYSDATE, 'YYYYMMDD') and to_char(SYSDATE+1, 'YYYYMMDD')
+order by fh.exp_arr_time_update_file,FF.FILE_NAME;
+SET SPOOL OFF
+exit

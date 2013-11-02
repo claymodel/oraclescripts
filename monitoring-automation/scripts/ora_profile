@@ -1,0 +1,13 @@
+if [[ -f ~/.profile ]];then
+  . ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+  . ~/.bash_profile
+fi
+
+sqlplus -s "/ as sysdba" <<!|awk '{if(NF>0){for(i=1;i<NF;i++)printf $i" "; print $NF; }}'
+set lines 9999 pages 999 feedback off heading off
+
+select p.profile, p.resource_name, p.resource_type, p.limit
+from dba_profiles p
+order by p.profile, p.resource_name;
+!

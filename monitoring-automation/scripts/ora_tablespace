@@ -1,0 +1,36 @@
+#?/bin/sh
+
+if [[ -f ~/.profile ]];then
+        . ~/.profile
+elif [[ -f ~/.bash_profile ]];then
+        . ~/.bash_profile
+fi
+
+if [[ "$ORACLE_SID" == "" || "$ORACLE_HOME" == "" ]];then
+	echo Oracle_Envierment_Not_Defined
+	exit 1
+fi
+
+sqlplus -s "/as sysdba" <<! |awk '{if(NF==6){for (i=1;i<=NF;i++)
+                                        if(substr($i,1,1)==".") printf "0"tolower($i)" "
+                                        else printf tolower($i)" "; print ""}}'
+        set lines 300
+        set pages 1000
+        set heading off
+        set feedback off
+        set serveroutput off
+SELECT d.tablespace_name name, decode(lower(d.status),'online',1,'offline',0,'read only',2,-1) status,
+round(nvl(a.bytes/1024/1024, 0),1) size_m, 
+round(nvl(f.bytes,0)/1024/1024,1) free_m,
+round(nvl(a.bytes-nvl(f.bytes,0),0)/1024/1024,1) usd_m, 
+round(nvl((a.bytes-nvl(f.bytes,0))/a.bytes * 100, 0),1) usd_pct 
+FROM sys.dba_tablespaces d, 
+(SELECT tablespace_name, SUM(bytes) bytes FROM dba_data_files GROUP BY tablespace_name) a, 
+(SELECT tablespace_name, SUM(bytes) bytes FROM dba_free_space GROUP BY tablespace_name) f 
+WHERE d.tablespace_name = a.tablespace_name(+) AND d.tablespace_name = f.tablespace_name(+) 
+--AND NOT (d.contents = 'TEMPORARY' OR d.contents = 'UNDO')
+AND NOT (d.contents = 'TEMPORARY')
+order by d.tablespace_name;
+
+        exit;
+!

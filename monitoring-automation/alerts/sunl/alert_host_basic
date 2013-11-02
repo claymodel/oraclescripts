@@ -1,0 +1,79 @@
+select  host_name||'['||(select min(substr(value,7)) from configurations c
+                          where conf_name='IP Address' and value like '10.19.%' and host_name=x.host_name
+                          and check_time=(select max(check_time) from configurations where host_name=c.host_name and conf_name=c.conf_name))
+                 ||']' hn,
+        decode(trunc(lag/2),    0,null,' Lag '||lag||' mins')||
+        decode(trunc(cpu_usage/90),0,null,' cpu='||cpu_usage) ||
+        decode(trunc(mem_usage/90)*page_in,0,null,' mem='||mem_usage||'and page_in='||page_in)||
+        decode(trunc(io_local_tps/1000),0,null,' io_local_tps='||io_local_tps)||
+        decode(trunc(io_storage_tps/60000),0,null,' io_storage_tps='||io_storage_tps)||
+        decode(trunc(net_rbps/90000000),0,null,' net_receive_mps='||round(net_rbps/1024/1024)||' ('||receive_ip||')')||
+	decode(trunc(net_sbps/90000000),0,null,' net_send_mps='||round(net_sbps/1024/1024)||' ('||send_ip||')')||
+        decode(net_err,0,null,' net_err='||net_err)||
+        decode(net_drop,0,null,' net_drop='||net_drop) msg
+from     (
+select  host_name, 
+        round((sysdate-end_time)*24*60,1) lag,
+        100-avg_id cpu_usage, 
+        100*avg_avm/(avg_avm+avg_fre) mem_usage ,
+        avg_pi page_in,
+        avg_ltps io_local_tps, 
+        avg_stps io_storage_tps, 
+        max_rbps net_rbps,
+				(select min(value) from configurations ic where host_name=y.host_name 
+								and check_time=(select max(check_time) from configurations where host_name=ic.host_name and conf_name=ic.conf_name)
+				 				and conf_name='IP Address' 
+								and subclass=(select interface from snap_host_netstat it where host_name=y.host_name and check_time>=y.check_time-5/24/60
+																		 and it.receive_bytes=y.max_rbps)) receive_ip,
+        max_sbps net_sbps,
+				(select min(value) from configurations ic where host_name=y.host_name 
+								and check_time=(select max(check_time) from configurations where host_name=ic.host_name and conf_name=ic.conf_name)
+				 				and conf_name='IP Address' 
+								and subclass=(select interface from snap_host_netstat it where host_name=y.host_name and check_time>=y.check_time-5/24/60
+																		 and it.transmit_bytes=y.max_sbps)) send_ip,
+        sum_err net_err, 
+        sum_drop net_drop
+from 
+(
+-- 过去5分钟主机平均性能
+select  t.host_name,
+				max(n.check_time) check_time, 
+        max(t.check_time)-(select difference from check_datetime where host_name=t.host_name)/3600/24 end_time,  
+        round(avg(r)) avg_r,
+        round(avg(b)) avg_b,
+        round(avg(pi)) avg_pi,
+        round(avg(po)) avg_po,
+        round(avg(us)) avg_us,
+        round(avg(sy)) avg_sy,
+        round(avg(id)) avg_id,
+        round(avg(wa)) avg_wa,
+        round(avg(avm)) avg_avm,
+        round(avg(fre)) avg_fre,
+        round(avg(proc)) avg_proc,
+        round(avg(act_proc)) avg_act_proc,
+        round(avg(i.local_tps)) avg_ltps, 
+        round(avg(i.local_read_mps)) avg_lread_mps, 
+        round(avg(i.local_write_mps)) avg_lwrite_mps,
+        round(avg(i.storage_tps)) avg_stps, 
+        round(avg(i.storage_read_mps)) avg_sread_mps, 
+        round(avg(i.storage_write_mps)) avg_swrite_mps,
+        round(max(n.receive_bytes)) max_rbps,
+        round(max(n.transmit_bytes)) max_sbps,
+        sum(n.receive_err+n.transmit_err) sum_err, 
+        sum(n.receive_drop+n.transmit_drop) sum_drop
+from perf_host_vmstat t ,perf_host_iostat i, snap_host_netstat n
+where t.check_time>=(select max(check_time) from perf_host_vmstat where host_name=t.host_name)-5/24/60
+and t.check_time=i.check_time(+) and t.check_time=n.check_time(+)
+and t.host_name=i.host_name(+) and t.host_name=n.host_name (+)
+group by t.host_name 
+) y
+) x
+where ((lag>=4 and host_name not in ('skt2b')) or (cpu_usage>=90 and host_name not like 'tjs%' and host_name not in ('tdbyj1','ls1','ls2'))
+or mem_usage>=90 and page_in>0 
+or ((io_local_tps>=2000
+or io_storage_tps >= 60000 )
+and host_name not like 'ruei%' )
+or net_err>0 
+or net_drop>0)
+--and host_name not in ('tqd1b') 
+and host_name not like 'ruei%'

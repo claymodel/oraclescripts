@@ -1,0 +1,32 @@
+#!/bin/sh
+
+if [[ $# -eq 0 ]];then
+        echo Please specify the program name.
+        exit 1
+fi
+
+program_identifier=$1
+
+workfolder=ftp
+if [[ $# -gt 1 ]];then
+        workfolder=$2
+fi
+
+cd $workfolder
+
+extent=true
+n=1
+while [ "$extent" == true ];do
+        if [[ `find . -name "$program_identifier=*=*" -mtime -$n -print|wc -l|awk '{print $1}'` -gt 0 ]];then
+                while [ `find . -name "$program_identifier=*=*" -mtime -$n -print|wc -l|awk '{print $1}'` -gt 0 ];do
+                        filename=`find . -name "$program_identifier=*=*" -mtime -$n -print|sort|tail -1`
+                        tmpfile=${filename}.$$.tmp
+                        mv $filename $tmpfile
+                        cat $tmpfile
+                        rm $tmpfile
+                done
+                n=`expr $n + 1`
+        else
+                extent=false
+        fi
+done

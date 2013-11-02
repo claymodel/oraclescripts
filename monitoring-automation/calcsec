@@ -1,0 +1,6 @@
+#! /bin/sh
+
+sec=`date +"%s"`
+if [[ "$sec" != "%s" ]]; then
+	echo "$sec"
+fi

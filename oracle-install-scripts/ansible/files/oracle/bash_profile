@@ -1,0 +1,18 @@
+# .bash_profile
+
+# Get the aliases and functions
+if [ -f ~/.bashrc ]; then
+  . ~/.bashrc
+fi
+
+# Sets up Oracle home, etc. 
+source ~/bin/env.sh 
+
+# For inside Oracle firewall. Needed if we want to use wget, git, etc.
+export http_proxy=http://www-proxy.us.oracle.com
+
+# put java first so we override the sytem java
+PATH=$JAVA_HOME/bin:$PATH:$HOME/bin:$ORACLE_HOME/bin:$OUD_HOME/bin
+
+export PATH
+

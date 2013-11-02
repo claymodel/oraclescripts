@@ -1,0 +1,33 @@
+if [[ `date +"%M"` == "15" && `date +"%H"` -gt '8' ]];then
+        dbcmd=`cat db_conn.cfg|awk '{if($1=="report"){for(i=2;i<NF;i++)printf $i" ";print $NF}}'`
+        if [[ "$dbcmd" != "" ]];then
+                if [[ -f ~/.profile ]];then
+                        . ~/.profile
+                elif [[ -f ~/.bash_profile ]];then
+                        . ~/.bash_profile
+                fi
+        
+        
+        $dbcmd  <<! |awk '{if(NF>0){print "工作流:"$1"月"$2"日"$3"时"$4"条工单,前一小时"$5";最近一个月忙时平均"$6",同时段平均"$7",上月忙时"$8",同时段"$9}}'
+
+set feedback off
+set heading off
+
+select (select to_char(sysdate-1/24,'mm dd hh24') from dual)||' '||
+(select count from snap_workflow_pbhs where to_char(check_time,'yyyymmddhh24')=to_char(sysdate,'yyyymmddhh24'))||
+' '||(select count from snap_workflow_pbhs where to_char(check_time,'yyyymmddhh24')=to_char(sysdate-1/24,'yyyymmddhh24'))||
+' '||(select round(avg(count)) from snap_workflow_pbhs where check_time>add_months(sysdate,-1) 
+and to_number(to_char(check_time-1/24,'hh24'),'99') between 8 and 22)||
+' '||(select round(avg(count)) from snap_workflow_pbhs where check_time>add_months(sysdate,-1)
+and to_char(check_time,'hh24')=to_char(sysdate,'hh24'))||
+' '||(select round(avg(count)) from snap_workflow_pbhs where check_time between add_months(sysdate,-2) and add_months(sysdate,-1)
+and to_number(to_char(check_time-1/24,'hh24'),'99') between 8 and 22)||
+' '||(select round(avg(count)) from snap_workflow_pbhs where check_time between add_months(sysdate,-2) and add_months(sysdate,-1)
+and to_char(check_time,'hh24')=to_char(sysdate,'hh24'))
+from dual;
+
+exit;
+
+!
+        fi
+fi

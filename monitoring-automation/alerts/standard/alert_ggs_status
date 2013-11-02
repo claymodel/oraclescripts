@@ -1,0 +1,9 @@
+select host_name||'['||(select min(substr(value,7)) from configurations c
+                          where conf_name='IP Address' and value like '10.19.%' and host_name=t.host_name
+                          and check_time=(select max(check_time) from configurations where host_name=c.host_name
+			  and conf_name=c.conf_name))
+                 ||']' hn,
+	program||'.'||Group_name||' '||status msg
+from snap_ggs_status t where t.check_time=(select max(check_time) from snap_ggs_status where host_name=t.host_name)
+and check_time-(select difference from check_datetime where host_name=t.host_name)/3600/24>sysdate-5/24/60
+and status!='RUNNING' and host_name not in ('tdbyj1','tyy1a') and status not like '%STOPPED%'

@@ -1,0 +1,35 @@
+#!/bin/sh
+if [[ $# -lt 1 ]];then
+	exit 1
+fi
+
+today=$1
+y=`echo $today|awk '{print substr($1,1,4)}'`
+m=`echo $today|awk '{print substr($1,5,2)}'`
+d=`echo $today|awk '{print substr($1,7,2)}'`
+
+monthlastday=31
+if [[ $m == "04" || $m == "06" || $m == "09" || $m == "11" ]];then
+	monthlastday=30
+elif [[ $m == "02" ]];then
+	if [[ `expr $y % 4` == 0 ]];then
+		monthlastday=29
+	else
+		monthlastday=28
+	fi
+fi
+tomorrow=$today
+if [[ $d != $monthlastday ]];then
+	tomorrow=`expr $today + 1`
+else
+	m=`expr $m + 1`
+	if [[ $m == 13 ]];then
+		m=1
+		y=`expr $y + 1`
+	fi
+	if [[ $m -lt 10 ]];then
+		m="0"$m
+	fi
+	tomorrow=${y}${m}01
+fi
+echo $tomorrow

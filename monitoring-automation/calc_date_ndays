@@ -1,0 +1,107 @@
+#!/bin/sh
+
+if [[ $# -lt 2 ]];then
+	exit 1
+fi
+
+startdate=$1
+ndays=$2
+
+targetdate=$startdate
+
+y0=`echo $startdate|awk '{print substr($1,1,4)}'`
+m0=`echo $startdate|awk '{print substr($1,5,2)}'`
+d0=`echo $startdate|awk '{print substr($1,7,2)}'`
+tmpy=$y0
+tmpm=$m0
+tmpd=$d0
+if [[ $ndays -ge 0 ]];then
+	i=$ndays
+	while [[ $i -gt 0 ]];do
+		monthlastday=31
+		if [[ $tmpm == "04" || $tmpm == "06" || $tmpm == "09" || $tmpm == "11" ]];then
+			monthlastday=30
+		elif [[ $tmpm == "02" ]];then
+			if [[ `expr $tmpy % 4` == 0 ]];then
+				monthlastday=29
+			else
+				monthlastday=28
+			fi
+		fi
+		x=$monthlastday
+		if [[ $tmpm == $m0 && $tmpy == $y0 ]];then
+			x=`expr $monthlastday - $d0 + 1`
+		fi
+		if [[ $i -ge $x ]];then
+			i=`expr $i - $x`
+			tmpd="01"
+			tmpm=`expr $tmpm + 1`
+			if [[ $tmpm == 13 ]];then
+				tmpm=1
+				tmpy=`expr $tmpy + 1`
+			fi
+			if [[ $tmpm -lt 10 ]];then
+				tmpm="0"$tmpm
+			fi
+		else
+			tmpd=`expr $tmpd + $i`
+			if [[ $tmpd -lt 10 ]];then
+				tmpd="0"$tmpd
+			fi
+			i=0
+		fi
+
+	done
+else
+	i=`expr 0 - $ndays`
+	while [[ $i -gt 0 ]];do
+                monthlastday=31
+		if [[ $tmpm == "04" || $tmpm == "06" || $tmpm == "09" || $tmpm == "11" ]];then
+			monthlastday=30
+		elif [[ $tmpm == "02" ]];then
+			if [[ `expr $tmpy % 4` == 0 ]];then
+				monthlastday=29
+			else
+				monthlastday=28
+			fi
+		fi
+		x=$monthlastday
+		if [[ $tmpm == $m0 && $tmpy == $y0 ]];then
+			x=$tmpd
+		fi
+		if [[ "$x" != "" && `echo "$x"|awk '{print substr($1,1,1)}'` == "0" ]];then
+			if [[ `echo "$x"|awk '{print length($1)}'` == 2 ]];then
+				x=`echo "$x"|awk '{print substr($1,2,1)}'`
+			fi
+		fi
+		if [[ $i -ge $x ]];then
+			i=`expr $i - $x`
+			tmpm=`expr $tmpm - 1`
+			if [[ $tmpm == 0 ]];then
+				tmpm=12
+				tmpy=`expr $tmpy - 1`
+			fi
+			if [[ $tmpm -lt 10 ]];then
+				tmpm="0"$tmpm
+			fi
+			tmpd=31
+			if [[ $tmpm == "04" || $tmpm == "06" || $tmpm == "09" || $tmpm == "11" ]];then                                                          
+				tmpd=30
+			elif [[ $tmpm == "02" ]];then
+				if [[ `expr $tmpy % 4` == 0 ]];then
+					tmpd=29 
+				else
+					tmpd=28                          
+				fi
+			fi
+		else
+			tmpd=`expr $tmpd - $i`
+			if [[ $tmpd -lt 10 ]];then
+				tmpd="0"$tmpd
+			fi
+			i=0
+		fi
+	done
+fi
+
+echo ${tmpy}${tmpm}${tmpd}

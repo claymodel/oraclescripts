@@ -1,0 +1,16 @@
+select distinct t.host_name||'['||(select min(substr(value,7)) from configurations c
+                          where conf_name='IP Address' and value like '10.19.%' and host_name=t.host_name
+                          and check_time=(select max(check_time) from configurations where host_name=c.host_name
+                          and conf_name=c.conf_name))
+                 ||']' hn,
+                 t.active_session||' active sessions, avg='||x.avg_sess||', '||t.user_session||' user sessions' msg
+from perf_ora_basic t ,
+         (select host_name , to_char(check_time,'hh24') ctime, round(avg(active_session),1) avg_sess from perf_ora_basic@smartmon_report
+                where check_time>sysdate-3
+                group by host_name,to_char(check_time,'hh24') ) x
+where t.check_time=(select max(check_time) from snap_ora_session where host_name=t.host_name)
+                        and t.host_name=x.host_name
+and to_char(check_time,'hh24')=x.ctime
+and t.active_session>=3*x.avg_sess 
+and t.active_session> t.user_session/3
+and t.host_name not like '%dbyj%' and t.host_name not like '%bcv%'

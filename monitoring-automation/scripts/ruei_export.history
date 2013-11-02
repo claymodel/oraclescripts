@@ -1,0 +1,49 @@
+#!/bin/sh
+
+if [[ $# -lt 2 ]];then
+        exit 2;
+fi
+
+URL_BASE=$1
+REPORT_ID=$2
+
+REPORT_INTERVAL=5
+if [[ $# -ge 3 ]];then
+	REPORT_INTERVAL=$3
+fi 
+
+OutputContainDate=true
+if [[ $# -ge 5 ]];then
+	OutputContainDate=false
+fi	
+
+DATE=""
+if [[ $# -ge 4 ]];then
+	DATE=$4
+fi
+
+if [[ `uname` != "Linux" ]];then
+	exit 9
+fi
+
+todoExport=false
+
+if [[ "$REPORT_INTERVAL" == "60" ]];then
+	if [[ "$mi" == "00" ]];then
+		todoExport=true
+		timestr="${DATE}00"
+	fi
+elif [[ "$REPORT_INTERVAL" == "1440" ]];then
+	todoExport=true
+	timestr="${DATE}000000"
+else
+	todoExport=true
+	timestr="${DATE}00"
+fi
+if [[ "$todoExport" == "true" ]];then
+if [[ "$OutputContainDate" == "true" ]];then
+	perl scripts/ruei_export.pl $URL_BASE $REPORT_ID $DATE | awk '{if(NF>0){printf "'$timestr' "; for (i=2;i<NF;i++)printf ("%s",$i " "); print $NF}}'
+else
+	perl scripts/ruei_export.pl $URL_BASE $REPORT_ID $DATE | awk '{if(NF>0){for (i=1;i<NF;i++)printf ("%s",$i " "); print $NF}}'
+fi
+fi

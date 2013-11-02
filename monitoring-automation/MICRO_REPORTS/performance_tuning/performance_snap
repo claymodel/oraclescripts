@@ -1,0 +1,163 @@
+. ~/.profile 
+
+OPTION=$1  # OPTION=INIT: first execution; OPTION="": to show results only 
+DAYS=$2
+HOST_IDENTIFIER=$3
+
+OPTION=`echo "$OPTION"|awk '{print toupper($1)}'`
+if [ "$DAYS" == "" ];then DAYS=10; fi
+timeStr=""
+timeStr_t=""
+timeStr_r=""
+if [[ "$DAYS" != "" ]];then 
+  timeStr=" and check_time > sysdate - $DAYS" ; 
+  timeStr_t=" and t.check_time > sysdate - $DAYS" ; 
+  timeStr_r=" and r.check_time > sysdate - $DAYS" ; 
+fi
+
+cd /smartmon/MICRO_REPORTS/performance_tuning/
+
+if [[ "$HOST_IDENTIFIER" == "" ]];then HOST_IDENTIFIER='yy'; fi
+db_conn_cmd=`cat /smartmon/db_conn.cfg|awk '{if($1=="report"){for(i=2;i<NF;i++)printf $i" ";print $NF}}'`
+
+if [[ "$OPTION" == "INIT" ]];then
+$db_conn_cmd <<! > /dev/null
+
+-- 获取当前配置信息
+create or replace view tmp_view_yy_current_conf as
+select host_name, check_time,
+       decode(subclass,
+                  'AIX' , conf_name,
+                  'Linux' , conf_name,
+                  subclass|| ' ' ||conf_name) conf_name , value
+from configurations t
+where host_name like '%$HOST_IDENTIFIER%'
+and conf_name in ( 'IP Address', 'Available Processor' ,'Defined Processor', 'Memory Size (M)', 'Processor Frequency'
+                 , 'Drive Count' ,'Logical Processor' , 'Processor Model', 'OS Name', 'OS Release' ,'Hardware Platform'
+                 , 'MAC Address' )
+and (host_name, check_time) in 
+    (select host_name, max (check_time)
+     from configurations where conf_name=t.conf_name group by host_name)
+and check_time>sysdate - 2
+order by host_name, subclass, conf_name, value
+;
+
+-- 计算当前各主机最忙时段,以及最忙时段执行的CPU指令数量
+drop table tmp_yy_cpu_usage_in_clocks;
+create table tmp_yy_cpu_usage_in_clocks as
+select host_name, to_char(check_time,'hh24' ) check_clock ,
+       round( avg (100 - id)) cpu_usage, round( avg (wa)) cpu_io_wait,round(avg (sy))cpu_system,round(avg (us)) cpu_user
+       ,round( avg (avm/(avm+fre)*100 )) memory_usage
+from perf_host_vmstat 
+where host_name like '%$HOST_IDENTIFIER%' $timeStr
+group by host_name, to_char(check_time, 'hh24')
+;
+
+create or replace view tmp_view_yy_worst_clocks as
+select t.host_name, t.worst_clock
+      ,round(t.cpu_usage*t.FULL_TIME_CPU_INSTRUCTIONS_T/ 100 ) CPU_INSTRUCTIONS_T
+      ,round(t.cpu_io_wait*t.FULL_TIME_CPU_INSTRUCTIONS_T/ 100 ) IO_INSTRUCTIONS_T
+      ,round(t.cpu_user*t.FULL_TIME_CPU_INSTRUCTIONS_T/ 100 ) User_INSTRUCTIONS_T
+      ,round(t.cpu_system*t.FULL_TIME_CPU_INSTRUCTIONS_T/ 100 ) System_INSTRUCTIONS_T
+      ,round(t.cpu_usage*t.physical_cpu/ 100 ) Physical_CPU_Consumption
+      ,round(t.memory_usage*t.memory_size_g/ 100 ) Physical_Memory_Consumption_G
+      ,t.cpu_usage, t.cpu_io_wait, t.cpu_user, t.memory_usage
+      ,t.Physical_CPU, t.Memory_Size_G, t.CPU_Hardware
+from (select u.host_name, u.check_clock worst_clock
+      ,u.cpu_usage ,u.cpu_io_wait, u.cpu_system, u.cpu_user, u.memory_usage
+      ,(( select value
+          from tmp_view_yy_current_conf
+          where conf_name='Logical Processor'
+          and host_name=u.host_name)/
+          ( select value
+          from tmp_view_yy_current_conf
+          where conf_name='Available Processor'
+          and host_name=u.host_name))||' Core '
+       ||( select substr(value ,instr( value, 'POWER' ))
+          from tmp_view_yy_current_conf
+          where conf_name='Processor Model'
+          and host_name=u.host_name)||' CPU @ '
+       ||( select round(value / 1000, 1 )
+          from tmp_view_yy_current_conf
+          where conf_name='Processor Frequency'
+          and host_name=u.host_name)||' GHz' CPU_Hardware
+      ,( select value
+          from tmp_view_yy_current_conf
+          where conf_name='Available Processor'
+          and host_name=u.host_name) Physical_CPU   
+      ,( select round(value / 1024)
+          from tmp_view_yy_current_conf
+          where conf_name='Memory Size (M)'
+          and host_name=u.host_name) Memory_Size_G   
+      ,round( 1000 *1000 * 3600/ 1024 /1024 / 1024/ 1024 *
+       ( select value
+          from tmp_view_yy_current_conf
+          where conf_name='Logical Processor'
+          and host_name=u.host_name)*
+        ( select value
+          from tmp_view_yy_current_conf
+          where conf_name='Processor Frequency'
+          and host_name=u.host_name)) FULL_TIME_CPU_INSTRUCTIONS_T
+  from tmp_yy_cpu_usage_in_clocks u
+  where (u.host_name, u.cpu_usage) in (
+  select host_name, max (cpu_usage) max_cpu_usage
+  from tmp_yy_cpu_usage_in_clocks group by host_name)
+  order by host_name, check_clock
+) t order by 4 desc
+;
+!
+fi
+
+
+$db_conn_cmd <<!
+set lines 300 pages 100 feedback off
+--create table pt_worst_clocks_host_load as
+insert into pt_worst_clocks_host_load
+select sysdate check_time, '$DAYS' last_days, t.*
+  from tmp_view_yy_worst_clocks t order by t.IO_INSTRUCTIONS_T desc;
+
+
+-- 找出最忙时间段的TOP Wait Events
+--create table pt_top_events as
+insert into pt_top_events
+select sysdate check_time, $DAYS last_days, x.* from (
+ select t.host_name, replace (t.event, '_', ' ' ) event , count ( distinct r.begin_snap_id) cnt
+ from snap_ora_sp_top_wait_events t, snap_ora_statspack_reports r, tmp_view_yy_worst_clocks v
+ where t.event not like '%.%' $timeStr_t $timeStr_r
+ and t.host_name=r.host_name and t.begin_snap_id = r.begin_snap_id and t.end_snap_id=r.end_snap_id
+ and v.host_name=t.host_name and to_char(r.begin_snap_time, 'hh24') = v.worst_clock
+ and t.event not in ( 'DB_CPU' ,'CPU_time' )
+ group by t.host_name, replace(t.event, '_' ,' ' )
+) x
+order by 1, 3 desc , 2;
+
+
+-- 找出最忙时间段的数据库负载指标
+--create table pt_load_profile as
+insert into pt_load_profile
+select sysdate check_time, $DAYS last_days, x.* from (
+select t.host_name, replace (t.item, '_', ' ' ) item, round(avg ( value), 2 ) avg_value, max (value ) max_value, min( value ) min_value
+  from snap_ora_sp_load_profile t, snap_ora_statspack_reports r, tmp_view_yy_worst_clocks v
+where t.item not like '%.%' and t.value> 0 $timeStr_t $timeStr_r
+and t.host_name=r.host_name and t.begin_snap_id = r.begin_snap_id and t.end_snap_id=r.end_snap_id
+and v.host_name=t.host_name and to_char(r.begin_snap_time, 'hh24') = v.worst_clock
+group by t.host_name, replace(t.item, '_' ,' ' )
+) x
+order by 1, 2 ;
+
+
+-- 找出最忙时间段的数据库性能指标
+--create table pt_db_Efficiency as
+insert into pt_db_Efficiency
+select sysdate check_time, $DAYS last_days, x.* from (
+select t.host_name, t.item, round(avg ( value), 2 ) avg_value, max ( value)  max_value, min (value ) min_value
+from snap_ora_sp_instance_effici t, snap_ora_statspack_reports r, tmp_view_yy_worst_clocks v
+where t.item not like '%.%' and t.value> 0 $timeStr_t $timeStr_r
+and t.host_name=r.host_name and t.begin_snap_id = r.begin_snap_id and t.end_snap_id=r.end_snap_id
+and v.host_name=t.host_name and to_char(r.begin_snap_time, 'hh24') = v.worst_clock
+group by t.host_name, t.item
+) x
+order by 1, 2 ;
+
+
+!

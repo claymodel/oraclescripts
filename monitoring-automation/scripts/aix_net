@@ -1,0 +1,56 @@
+#! /bin/sh
+CmdType=$1;
+VAR1=$2;
+___str1=`{ for x in \`ifconfig -lu\` ;do 
+		ifconfig $x|awk '{for(i=1;i<=NF;i++) if($i=="inet") print "'$x' "$(i+1)" "}'|head -1|
+			awk '{for(i=1;i<=NF;i++)printf $i}' FS="";
+		entstat $x 2>&1|awk '{	if(NR==1 && NF==0){print "ERROR"}
+					else if ($1=="Hardware" && $2=="Address:") mac=$3; 
+					else if ($1=="Bytes:" && $3=="Bytes:") {txb=$2; rxb=$4} 
+					else if($1=="Transmit" && $2=="Errors:"){te=$3; re=$6} 
+					else if($1=="Packets" && $2=="Dropped:"){td=$3 ; rd=$6} }
+				     END{print mac,rxb,txb,re,te,rd,td}' ; 
+	   done 
+	 }|awk '{if(NF==9)print $1,$3,$2,0,$4,$5,$6,$7,$8,$9}'`; 
+
+if [[ "$CmdType" == "stat" ]];then
+	sleep $VAR1; 
+	___str2=`{ for x in \`ifconfig -lu\` ;do 
+			ifconfig $x|awk '{for(i=1;i<=NF;i++)if($i=="inet") print "'$x' "$(i+1)" "}'|head -1|
+				awk '{for(i=1;i<=NF;i++)printf $i}' FS="";
+			entstat $x 2>&1|awk '{	if(NR==1 && NF==0){print "ERROR"}
+						else if ($1=="Hardware" && $2=="Address:") mac=$3; 
+						else if ($1=="Bytes:" && $3=="Bytes:") {txb=$2; rxb=$4} 
+						else if($1=="Transmit" && $2=="Errors:"){te=$3; re=$6} 
+						else if($1=="Packets" && $2=="Dropped:"){td=$3 ; rd=$6} }
+					     END{print mac,rxb,txb,re,te,rd,td}' ; 
+		   done 
+		 }|awk '{if(NF==9)print $1,$3,$2,0,$4,$5,$6,$7,$8,$9}'`; 
+	for ___interface in `echo "$___str1"|awk '{for(i=1;i<=NF;i+=10)print $i}'`;do 
+		___mac=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+1;print $j}}'`; 
+		___ip=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+2;print $j}}'`; 
+		___ipv6=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+3;print $j}}'`; 
+		___rxb1=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+4;print $j}}'`; 
+		___rxb2=`echo $___str2|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+4;print $j}}'`; 
+		___txb1=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+5;print $j}}'`;
+		___txb2=`echo $___str2|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+5;print $j}}'`;
+		___re1=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+6;print $j}}'`;
+		___re2=`echo $___str2|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+6;print $j}}'`;
+		___te1=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+7;print $j}}'`;
+		___te2=`echo $___str2|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+7;print $j}}'`;
+		___rd1=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+8;print $j}}'`;
+		___rd2=`echo $___str2|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+8;print $j}}'`;
+		___td1=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+9;print $j}}'`;
+		___td2=`echo $___str2|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+9;print $j}}'`;
+		echo $___interface `echo "($___rxb2-$___rxb1)/$VAR1"|bc` `echo "($___txb2-$___txb1)/$VAR1"|bc` `echo "($___re2-$___re1)/$VAR1"|bc` `echo "($___te2-$___te1)/$VAR1"|bc` `echo "($___rd2-$___rd1)/$VAR1"|bc` `echo "($___td2-$___td1)/$VAR1"|bc`|
+			awk '{printf substr($1,1,10); for(i=2;i<=NF;i++) printf " "$i; print " "$i}';
+	done
+elif [[ "$CmdType" == "conf" ]];then
+	for ___interface in `echo "$___str1"|awk '{for(i=1;i<=NF;i+=10)print $i}'`;do 
+		___mac=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+1;print $j}}'`; 
+		___ip=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+2;print $j}}'`; 
+		___ipv6=`echo $___str1|awk '{for(i=1;i<=NF;i++)if($i=="'$___interface'"){j=i+3;print $j}}'`; 
+		echo $___interface  $___mac $___ip $___ipv6 |
+			awk '{print "Interface_Name:"substr($1,1,10), "MAC_Address:"substr($2,1,17), "IP_Address:"substr($3,1,15), "IPv6_Address:"substr($4,1,50)}';
+	done
+fi
